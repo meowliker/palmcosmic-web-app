@@ -22,6 +22,31 @@ export default function UserHydrator() {
     if (!userId) return;
 
     try {
+      const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
+      const sessionId = url?.searchParams.get("session_id") || "";
+      const fulfillKey = sessionId ? `pc_fulfilled_${sessionId}` : "";
+
+      if (sessionId && typeof window !== "undefined" && !sessionStorage.getItem(fulfillKey)) {
+        sessionStorage.setItem(fulfillKey, "1");
+        try {
+          await fetch("/api/stripe/fulfill-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, userId }),
+          });
+
+          try {
+            const next = new URL(window.location.href);
+            next.searchParams.delete("session_id");
+            window.history.replaceState({}, "", next.toString());
+          } catch {
+            // ignore
+          }
+        } catch (err) {
+          console.error("Failed to fulfill checkout session:", err);
+        }
+      }
+
       const snap = await getDoc(doc(db, "users", userId));
       if (!snap.exists()) return;
 

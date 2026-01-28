@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
       metadata.type = "coins";
       metadata.coins = coinPackage.coins.toString();
-      successUrl = `${baseUrl}/chat?coins_purchased=${coinPackage.coins}`;
+      successUrl = `${baseUrl}/chat?coins_purchased=${coinPackage.coins}&session_id={CHECKOUT_SESSION_ID}`;
       cancelUrl = `${baseUrl}/chat?cancelled=true`;
 
     } else if (type === "report") {
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       metadata.type = "report";
       metadata.feature = report.feature;
       metadata.reportId = packageId;
-      successUrl = `${baseUrl}/dashboard?report_unlocked=${report.feature}`;
+      successUrl = `${baseUrl}/dashboard?report_unlocked=${report.feature}&session_id={CHECKOUT_SESSION_ID}`;
       cancelUrl = `${baseUrl}/reports?cancelled=true`;
 
     } else {
@@ -100,6 +100,12 @@ export async function POST(request: NextRequest) {
 
     if (typeof successPath === "string" && successPath.startsWith("/")) {
       successUrl = `${baseUrl}${successPath}`;
+    }
+
+    if (!successUrl.includes("{CHECKOUT_SESSION_ID}")) {
+      successUrl = successUrl.includes("?")
+        ? `${successUrl}&session_id={CHECKOUT_SESSION_ID}`
+        : `${successUrl}?session_id={CHECKOUT_SESSION_ID}`;
     }
     if (typeof cancelPath === "string" && cancelPath.startsWith("/")) {
       cancelUrl = `${baseUrl}${cancelPath}`;

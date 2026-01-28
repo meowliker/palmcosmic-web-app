@@ -88,11 +88,17 @@ export async function POST(request: NextRequest) {
     // Get the base URL - use request origin as fallback
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "https://palmcosmic-web-app.vercel.app";
 
-    let successUrl = `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}`;
+    let successUrl = `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}&session_id={CHECKOUT_SESSION_ID}`;
     let cancelUrl = `${baseUrl}/onboarding/step-18?cancelled=true`;
 
     if (typeof successPath === "string" && successPath.startsWith("/")) {
       successUrl = `${baseUrl}${successPath}`;
+    }
+
+    if (!successUrl.includes("{CHECKOUT_SESSION_ID}")) {
+      successUrl = successUrl.includes("?")
+        ? `${successUrl}&session_id={CHECKOUT_SESSION_ID}`
+        : `${successUrl}?session_id={CHECKOUT_SESSION_ID}`;
     }
     if (typeof cancelPath === "string" && cancelPath.startsWith("/")) {
       cancelUrl = `${baseUrl}${cancelPath}`;
