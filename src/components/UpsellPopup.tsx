@@ -184,8 +184,10 @@ export function AllUpsellsPopup({ isOpen, onClose, onPurchase }: AllUpsellsPopup
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           selectedOffers: ["ultra-pack"],
-          userId: "",
+          userId: generateUserId(),
           email: localStorage.getItem("palmcosmic_email") || "",
+          successPath: "/dashboard?upsell_success=true&offers=ultra-pack",
+          cancelPath: "/reports?cancelled=true",
         }),
       });
 

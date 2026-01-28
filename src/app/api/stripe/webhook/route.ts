@@ -150,6 +150,9 @@ export async function POST(request: NextRequest) {
               subscriptionPlan: plan || null,
               subscriptionStatus: "active",
               subscriptionStartedAt: now,
+              subscriptionCancelled: false,
+              stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
+              stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
               updatedAt: now,
             },
             { merge: true }
@@ -207,6 +210,7 @@ export async function POST(request: NextRequest) {
             .set(
               {
                 stripeSubscriptionId: subscription.id,
+                stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : null,
                 subscriptionStatus: subData.status,
                 subscriptionPlan: subData.metadata?.plan || subData.items?.data?.[0]?.price?.lookup_key || null,
                 currentPeriodEnd: subData.current_period_end
@@ -237,6 +241,8 @@ export async function POST(request: NextRequest) {
                 subscriptionStatus: "cancelled",
                 subscriptionCancelled: true,
                 subscriptionEndedAt: now,
+                stripeSubscriptionId: subscription.id,
+                stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : null,
                 updatedAt: now,
               },
               { merge: true }

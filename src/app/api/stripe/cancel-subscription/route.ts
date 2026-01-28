@@ -8,7 +8,44 @@ export async function POST(request: NextRequest) {
   try {
     const { userId, subscriptionId } = await request.json();
 
-    if (!subscriptionId) {
+    let resolvedSubscriptionId: string | null = subscriptionId || null;
+
+    let resolvedCustomerId: string | null = null;
+
+    if (!resolvedSubscriptionId && userId) {
+      const adminDb = getAdminDb();
+      const snap = await adminDb.collection("users").doc(userId).get();
+      if (snap.exists) {
+        resolvedSubscriptionId = ((snap.data() as any)?.stripeSubscriptionId as string) || null;
+        resolvedCustomerId = ((snap.data() as any)?.stripeCustomerId as string) || null;
+      }
+    }
+
+    if (!resolvedSubscriptionId && resolvedCustomerId) {
+      const subs = await stripe.subscriptions.list({
+        customer: resolvedCustomerId,
+        status: "all",
+        limit: 10,
+      });
+
+      const preferred = subs.data.find((s) => ["active", "trialing", "past_due"].includes((s as any).status)) || subs.data[0];
+      if (preferred?.id) {
+        resolvedSubscriptionId = preferred.id;
+
+        if (userId) {
+          const adminDb = getAdminDb();
+          await adminDb.collection("users").doc(userId).set(
+            {
+              stripeSubscriptionId: preferred.id,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        }
+      }
+    }
+
+    if (!resolvedSubscriptionId) {
       return NextResponse.json(
         { error: "Subscription ID is required" },
         { status: 400 }
@@ -16,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Cancel the subscription at period end (not immediately)
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
+    const subscription = await stripe.subscriptions.update(resolvedSubscriptionId, {
       cancel_at_period_end: true,
     });
 
@@ -32,6 +69,7 @@ export async function POST(request: NextRequest) {
         {
           subscriptionCancelled: true,
           subscriptionEndDate: cycleEndDate,
+          stripeSubscriptionId: subscription.id,
           updatedAt: now,
         },
         { merge: true }

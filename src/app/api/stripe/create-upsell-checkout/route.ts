@@ -25,7 +25,7 @@ const UPSELL_PRICES: Record<string, { priceId: string; amount: number }> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { selectedOffers, userId, email } = await request.json();
+    const { selectedOffers, userId, email, successPath, cancelPath } = await request.json();
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
@@ -88,13 +88,23 @@ export async function POST(request: NextRequest) {
     // Get the base URL - use request origin as fallback
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "https://palmcosmic-web-app.vercel.app";
 
+    let successUrl = `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}`;
+    let cancelUrl = `${baseUrl}/onboarding/step-18?cancelled=true`;
+
+    if (typeof successPath === "string" && successPath.startsWith("/")) {
+      successUrl = `${baseUrl}${successPath}`;
+    }
+    if (typeof cancelPath === "string" && cancelPath.startsWith("/")) {
+      cancelUrl = `${baseUrl}${cancelPath}`;
+    }
+
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode: "payment", // One-time payment, not subscription
       payment_method_types: ["card"],
       allow_promotion_codes: true,
       line_items: lineItems,
-      success_url: `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}`,
-      cancel_url: `${baseUrl}/onboarding/step-18?cancelled=true`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       metadata: {
         userId: userId || "",
         type: "upsell",
