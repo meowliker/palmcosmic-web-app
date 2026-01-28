@@ -64,13 +64,10 @@ export default function PalmReadingPage() {
       }
       
       // Check if palm image exists in localStorage (from onboarding)
+      // Don't auto-analyze here - reading should already be generated after paywall
       const savedPalmImage = localStorage.getItem("palmcosmic_palm_image");
       if (savedPalmImage) {
         setCapturedImage(savedPalmImage);
-        // Auto-generate reading from the saved palm image
-        setLoading(false);
-        analyzePalm(savedPalmImage);
-        return;
       }
       
       setLoading(false);
@@ -80,9 +77,6 @@ export default function PalmReadingPage() {
       const savedPalmImage = localStorage.getItem("palmcosmic_palm_image");
       if (savedPalmImage) {
         setCapturedImage(savedPalmImage);
-        setLoading(false);
-        analyzePalm(savedPalmImage);
-        return;
       }
       setLoading(false);
     }
@@ -444,14 +438,15 @@ export default function PalmReadingPage() {
               className="w-full h-full object-cover"
             />
 
-            {/* Hand outline overlay using palmoutline.png */}
+            {/* Hand outline overlay using palmoutline.png - flipped and sized like onboarding */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <img
                 src="/palmoutline.png"
                 alt="Palm outline"
-                width={340}
-                height={420}
+                width={380}
+                height={470}
                 className="object-contain opacity-70"
+                style={{ transform: "scaleX(-1) scale(1.15)" }}
               />
             </div>
 
@@ -512,7 +507,7 @@ export default function PalmReadingPage() {
         <div className="w-full max-w-md h-screen bg-[#0A0E1A] overflow-hidden flex flex-col">
           <div className="sticky top-0 z-40 bg-[#0A0E1A]/95 backdrop-blur-sm border-b border-white/10">
             <div className="flex items-center gap-4 px-4 py-3">
-              <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center">
+              <button onClick={() => router.push("/reports")} className="w-10 h-10 flex items-center justify-center">
                 <ArrowLeft className="w-5 h-5 text-white" />
               </button>
               <h1 className="text-white text-xl font-semibold flex-1 text-center pr-10">Palm Reading</h1>

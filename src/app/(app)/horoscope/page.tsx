@@ -74,10 +74,10 @@ export default function HoroscopePage() {
     try {
       const periodConfig = PERIODS.find((p) => p.id === selectedPeriod);
       const period = periodConfig?.period || "daily";
-      const day = periodConfig?.day || "TODAY";
 
+      // Use cached endpoint which stores horoscopes in Firebase
       const response = await fetch(
-        `/api/horoscope?sign=${selectedSign}&period=${period}&day=${day}`
+        `/api/horoscope/cached?sign=${selectedSign}&period=${period}`
       );
 
       if (response.ok) {
@@ -151,7 +151,7 @@ export default function HoroscopePage() {
             <span className="text-white/60 text-sm">{currentDate}</span>
           </div>
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push("/reports")}
             className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
           >
             <X className="w-4 h-4 text-white/60" />

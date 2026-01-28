@@ -1,18 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2, X } from "lucide-react";
+import { ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2, X, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
   signInWithEmailAndPassword, 
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink
+  sendPasswordResetEmail
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useUserStore } from "@/lib/user-store";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,6 +27,22 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState("");
+  const [otpCode, setOtpCode] = useState(["" , "", "", "", "", ""]);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Forgot Password states
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState("");
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  // User not found state
+  const [showUserNotFound, setShowUserNotFound] = useState(false);
+  const [notFoundEmail, setNotFoundEmail] = useState("");
+
+  const { setSubscriptionPlan, setCoins, setFirebaseUserId } = useUserStore();
 
   const handleEmailPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,68 +109,172 @@ export default function LoginPage() {
     setOtpLoading(true);
 
     try {
-      const actionCodeSettings = {
-        url: `${window.location.origin}/login?email=${encodeURIComponent(otpEmail)}`,
-        handleCodeInApp: true,
-      };
+      const response = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: otpEmail }),
+      });
 
-      await sendSignInLinkToEmail(auth, otpEmail, actionCodeSettings);
-      
-      // Save email for verification
-      localStorage.setItem("palmcosmic_email_for_signin", otpEmail);
-      
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.error === "USER_NOT_FOUND") {
+          setNotFoundEmail(otpEmail);
+          setShowOtpModal(false);
+          setShowUserNotFound(true);
+          return;
+        }
+        throw new Error(data.message || data.error || "Failed to send OTP");
+      }
+
       setOtpSent(true);
+      setOtpCode(["", "", "", "", "", ""]);
     } catch (err: any) {
       console.error("OTP send error:", err);
-      
-      switch (err.code) {
-        case "auth/invalid-email":
-          setOtpError("Invalid email address.");
-          break;
-        case "auth/user-not-found":
-          setOtpError("No account found with this email.");
-          break;
-        default:
-          setOtpError("Failed to send sign-in link. Please try again.");
-      }
+      setOtpError(err.message || "Failed to send OTP. Please try again.");
     } finally {
       setOtpLoading(false);
     }
   };
 
-  // Check if user arrived via email link
-  useState(() => {
-    if (typeof window !== "undefined" && isSignInWithEmailLink(auth, window.location.href)) {
-      let emailForSignIn = localStorage.getItem("palmcosmic_email_for_signin");
-      
-      if (!emailForSignIn) {
-        // User opened link on different device, ask for email
-        emailForSignIn = window.prompt("Please provide your email for confirmation");
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) {
+      value = value.slice(-1);
+    }
+    
+    const newOtp = [...otpCode];
+    newOtp[index] = value;
+    setOtpCode(newOtp);
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+
+    // Auto-verify when all digits entered
+    if (newOtp.every(digit => digit !== "") && newOtp.join("").length === 6) {
+      handleVerifyOtp(newOtp.join(""));
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !otpCode[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleVerifyOtp = async (code: string) => {
+    setOtpError("");
+    setOtpVerifying(true);
+
+    try {
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: otpEmail, otp: code }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid OTP");
       }
 
-      if (emailForSignIn) {
-        signInWithEmailLink(auth, emailForSignIn, window.location.href)
-          .then(async (result) => {
-            localStorage.removeItem("palmcosmic_email_for_signin");
-            localStorage.setItem("palmcosmic_user_id", result.user.uid);
-            localStorage.setItem("palmcosmic_email", result.user.email || "");
-            
-            // Set access cookie via API
-            try {
-              await fetch("/api/session", { method: "POST" });
-            } catch (err) {
-              console.error("Failed to set session:", err);
-            }
-            
-            router.push("/reports");
-          })
-          .catch((error) => {
-            console.error("Email link sign-in error:", error);
-            setError("Failed to sign in with email link. Please try again.");
-          });
+      // Login successful
+      localStorage.setItem("palmcosmic_user_id", data.user.id);
+      localStorage.setItem("palmcosmic_email", data.user.email);
+      
+      // Update user store
+      if (data.user.subscriptionPlan) {
+        setSubscriptionPlan(data.user.subscriptionPlan);
       }
+      if (data.user.coins) {
+        setCoins(data.user.coins);
+      }
+      setFirebaseUserId(data.user.id);
+
+      // Set session
+      try {
+        await fetch("/api/session", { method: "POST" });
+      } catch (err) {
+        console.error("Failed to set session:", err);
+      }
+
+      router.push("/reports");
+    } catch (err: any) {
+      console.error("OTP verify error:", err);
+      setOtpError(err.message || "Invalid OTP. Please try again.");
+      setOtpCode(["", "", "", "", "", ""]);
+      otpInputRefs.current[0]?.focus();
+    } finally {
+      setOtpVerifying(false);
     }
-  });
+  };
+
+  const handleForgotPassword = async () => {
+    setForgotError("");
+    
+    if (!forgotEmail) {
+      setForgotError("Please enter your email address");
+      return;
+    }
+
+    setForgotLoading(true);
+
+    try {
+      // First check if user exists
+      const checkResponse = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+
+      const checkData = await checkResponse.json();
+
+      if (checkData.error === "USER_NOT_FOUND") {
+        setNotFoundEmail(forgotEmail);
+        setShowForgotPassword(false);
+        setShowUserNotFound(true);
+        return;
+      }
+
+      // User exists, send password reset email
+      await sendPasswordResetEmail(auth, forgotEmail, {
+        url: `${window.location.origin}/reset-password`,
+        handleCodeInApp: false,
+      });
+
+      setForgotSuccess(true);
+    } catch (err: any) {
+      console.error("Forgot password error:", err);
+      
+      if (err.code === "auth/user-not-found") {
+        setNotFoundEmail(forgotEmail);
+        setShowForgotPassword(false);
+        setShowUserNotFound(true);
+        return;
+      }
+      
+      setForgotError(err.message || "Failed to send reset email. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const resetOtpModal = () => {
+    setShowOtpModal(false);
+    setOtpSent(false);
+    setOtpEmail("");
+    setOtpError("");
+    setOtpCode(["", "", "", "", "", ""]);
+  };
+
+  const resetForgotModal = () => {
+    setShowForgotPassword(false);
+    setForgotEmail("");
+    setForgotError("");
+    setForgotSuccess(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
@@ -275,6 +394,17 @@ export default function LoginPage() {
               "Login"
             )}
           </Button>
+
+          {/* Forgot Password Link */}
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="text-white/50 hover:text-white/70 text-sm transition-colors"
+            >
+              Forgot password?
+            </button>
+          </div>
         </motion.form>
 
         {/* OTP Sign In Link */}
@@ -320,28 +450,18 @@ export default function LoginPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => {
-              setShowOtpModal(false);
-              setOtpSent(false);
-              setOtpEmail("");
-              setOtpError("");
-            }}
+            onClick={resetOtpModal}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-[#1A1F2E] rounded-2xl w-full max-w-sm p-6 border border-white/10"
+              className="bg-[#1A1F2E] rounded-2xl w-full max-w-sm p-6 border border-white/10 relative"
             >
               {/* Close Button */}
               <button
-                onClick={() => {
-                  setShowOtpModal(false);
-                  setOtpSent(false);
-                  setOtpEmail("");
-                  setOtpError("");
-                }}
+                onClick={resetOtpModal}
                 className="absolute top-4 right-4 text-white/50 hover:text-white"
               >
                 <X className="w-5 h-5" />
@@ -349,11 +469,14 @@ export default function LoginPage() {
 
               {!otpSent ? (
                 <>
+                  <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                    <KeyRound className="w-7 h-7 text-primary" />
+                  </div>
                   <h2 className="text-white text-xl font-bold text-center mb-2">
-                    Sign in with Email Link
+                    Sign in with Code
                   </h2>
                   <p className="text-white/60 text-center text-sm mb-6">
-                    We&apos;ll send a sign-in link to your email
+                    We&apos;ll send a 6-digit code to your email
                   </p>
 
                   {otpError && (
@@ -381,34 +504,162 @@ export default function LoginPage() {
                     {otpLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      "Send Sign-in Link"
+                      "Send Code"
                     )}
                   </Button>
                 </>
               ) : (
                 <>
                   <div className="text-center">
-                    <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                      <Mail className="w-8 h-8 text-primary" />
+                    <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                      <Mail className="w-7 h-7 text-primary" />
+                    </div>
+                    <h2 className="text-white text-xl font-bold mb-2">
+                      Enter Verification Code
+                    </h2>
+                    <p className="text-white/60 text-sm mb-2">
+                      We&apos;ve sent a 6-digit code to
+                    </p>
+                    <p className="text-primary font-medium mb-6">{otpEmail}</p>
+
+                    {otpError && (
+                      <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                        <p className="text-red-400 text-sm text-center">{otpError}</p>
+                      </div>
+                    )}
+
+                    {/* OTP Input Fields */}
+                    <div className="flex justify-center gap-2 mb-6">
+                      {otpCode.map((digit, index) => (
+                        <input
+                          key={index}
+                          ref={(el) => { otpInputRefs.current[index] = el; }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleOtpChange(index, e.target.value.replace(/\D/g, ""))}
+                          onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                          disabled={otpVerifying}
+                          className="w-11 h-14 bg-[#0A0E1A] border-2 border-white/20 rounded-xl text-white text-center text-xl font-bold focus:outline-none focus:border-primary transition-colors disabled:opacity-50"
+                        />
+                      ))}
+                    </div>
+
+                    {otpVerifying && (
+                      <div className="flex items-center justify-center gap-2 mb-4">
+                        <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                        <span className="text-white/60 text-sm">Verifying...</span>
+                      </div>
+                    )}
+
+                    <p className="text-white/40 text-xs mb-4">
+                      Code expires in 10 minutes
+                    </p>
+
+                    <button
+                      onClick={() => {
+                        setOtpSent(false);
+                        setOtpCode(["", "", "", "", "", ""]);
+                      }}
+                      className="text-primary hover:text-primary/80 text-sm font-medium"
+                    >
+                      Didn&apos;t receive code? Send again
+                    </button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Forgot Password Modal */}
+      <AnimatePresence>
+        {showForgotPassword && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={resetForgotModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#1A1F2E] rounded-2xl w-full max-w-sm p-6 border border-white/10 relative"
+            >
+              {/* Close Button */}
+              <button
+                onClick={resetForgotModal}
+                className="absolute top-4 right-4 text-white/50 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {!forgotSuccess ? (
+                <>
+                  <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                    <Lock className="w-7 h-7 text-primary" />
+                  </div>
+                  <h2 className="text-white text-xl font-bold text-center mb-2">
+                    Forgot Password?
+                  </h2>
+                  <p className="text-white/60 text-center text-sm mb-6">
+                    Enter your email and we&apos;ll send you a reset link
+                  </p>
+
+                  {forgotError && (
+                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                      <p className="text-red-400 text-sm text-center">{forgotError}</p>
+                    </div>
+                  )}
+
+                  <div className="relative mb-4">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="Enter your email"
+                      className="w-full bg-[#0A0E1A] border border-white/20 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleForgotPassword}
+                    disabled={forgotLoading}
+                    className="w-full h-12 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-500 text-white font-semibold"
+                  >
+                    {forgotLoading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      "Send Reset Link"
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="text-center">
+                    <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+                      <Mail className="w-7 h-7 text-green-400" />
                     </div>
                     <h2 className="text-white text-xl font-bold mb-2">
                       Check Your Email
                     </h2>
-                    <p className="text-white/60 text-sm mb-4">
-                      We&apos;ve sent a sign-in link to
+                    <p className="text-white/60 text-sm mb-2">
+                      We&apos;ve sent a password reset link to
                     </p>
-                    <p className="text-primary font-medium mb-6">{otpEmail}</p>
+                    <p className="text-primary font-medium mb-6">{forgotEmail}</p>
                     <p className="text-white/40 text-xs">
-                      Click the link in the email to sign in. The link will expire in 1 hour.
+                      Click the link in the email to reset your password.
                     </p>
                   </div>
 
                   <Button
-                    onClick={() => {
-                      setShowOtpModal(false);
-                      setOtpSent(false);
-                      setOtpEmail("");
-                    }}
+                    onClick={resetForgotModal}
                     variant="outline"
                     className="w-full h-12 mt-6 border-white/20 text-white hover:bg-white/10"
                   >
@@ -416,6 +667,70 @@ export default function LoginPage() {
                   </Button>
                 </>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* User Not Found Modal */}
+      <AnimatePresence>
+        {showUserNotFound && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowUserNotFound(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#1A1F2E] rounded-2xl w-full max-w-sm p-6 border border-white/10 relative"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setShowUserNotFound(false)}
+                className="absolute top-4 right-4 text-white/50 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center">
+                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">😕</span>
+                </div>
+                <h2 className="text-white text-xl font-bold mb-2">
+                  User Not Found
+                </h2>
+                <p className="text-white/60 text-sm mb-2">
+                  No account exists with the email
+                </p>
+                <p className="text-primary font-medium mb-6">{notFoundEmail}</p>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  onClick={() => {
+                    setShowUserNotFound(false);
+                    router.push("/welcome");
+                  }}
+                  className="w-full h-12 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-500 text-white font-semibold"
+                >
+                  Create New Account
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowUserNotFound(false);
+                    setNotFoundEmail("");
+                  }}
+                  variant="outline"
+                  className="w-full h-12 border-white/20 text-white hover:bg-white/10"
+                >
+                  Login with Other Account
+                </Button>
+              </div>
             </motion.div>
           </motion.div>
         )}

@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
       metadata.type = "coins";
       metadata.coins = coinPackage.coins.toString();
-      successUrl = `${baseUrl}/dashboard?coins_purchased=${coinPackage.coins}`;
+      successUrl = `${baseUrl}/chat?coins_purchased=${coinPackage.coins}`;
 
     } else if (type === "report") {
       const report = REPORTS[packageId];
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ["card"],
       line_items: lineItems,
       success_url: successUrl,
-      cancel_url: `${baseUrl}/dashboard?cancelled=true`,
+      cancel_url: `${baseUrl}/chat?cancelled=true`,
       metadata,
     };
 

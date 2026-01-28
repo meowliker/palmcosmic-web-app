@@ -5,7 +5,7 @@ import { useState } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Check, Shield } from "lucide-react";
+import { Check, Shield, Coins } from "lucide-react";
 import { useUserStore, SubscriptionPlan } from "@/lib/user-store";
 
 const pricingPlans = [
@@ -37,6 +37,7 @@ const pricingPlans = [
     trialText: "2-week free trial",
     description: "Best value - Save 67%",
     bestValue: true,
+    bonusCoins: 30,
   },
 ];
 
@@ -153,7 +154,7 @@ export default function Step17Page() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-sm mb-4 text-center"
         >
-          <h2 className="text-muted-foreground text-sm uppercase tracking-wider">Complete Your Purchase</h2>
+          <h2 className="text-muted-foreground text-sm uppercase tracking-wider">Unlock predictions</h2>
         </motion.div>
 
         {/* Unlock predictions heading */}
@@ -163,7 +164,7 @@ export default function Step17Page() {
           transition={{ delay: 0.1 }}
           className="text-xl font-bold text-center mb-6"
         >
-          Unlock predictions
+          Complete Your Purchase
         </motion.h1>
 
         {/* Pricing plans */}
@@ -208,6 +209,12 @@ export default function Step17Page() {
                   <p className="text-xs text-muted-foreground">
                     {plan.period}
                   </p>
+                  {(plan as any).bonusCoins && (
+                    <div className="flex items-center gap-1 justify-end mt-1">
+                      <span className="text-xs text-yellow-400 font-semibold">+{(plan as any).bonusCoins}</span>
+                      <Coins className="w-3 h-3 text-yellow-400" />
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.button>

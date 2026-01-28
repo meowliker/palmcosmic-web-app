@@ -564,7 +564,7 @@ export default function CompatibilityPage() {
         <div className="sticky top-0 z-40 bg-[#0A0E1A]/95 backdrop-blur-sm">
           <div className="flex items-center gap-4 px-4 py-3">
             <button
-              onClick={() => result ? setResult(null) : router.back()}
+              onClick={() => result ? setResult(null) : router.push("/reports")}
               className="w-10 h-10 flex items-center justify-center"
             >
               <ArrowLeft className="w-5 h-5 text-white" />

@@ -90,8 +90,22 @@ export async function POST(request: NextRequest) {
           // Handle subscription payment
           console.log(`Subscription checkout completed for user ${userId}, plan: ${plan}`);
           
-          // TODO: Update user subscription in Firebase
-          // await updateUserSubscription(userId, plan, session.subscription);
+          // Add coins based on plan: weekly/monthly = 15 coins, yearly = 30 coins
+          let coinsToAdd = 0;
+          if (plan === "weekly" || plan === "monthly") {
+            coinsToAdd = 15;
+          } else if (plan === "yearly") {
+            coinsToAdd = 30;
+          }
+          
+          if (userId) {
+            await updateUserSubscription(userId, {
+              subscriptionPlan: plan,
+              subscriptionStatus: "active",
+              coins: coinsToAdd,
+              subscriptionStartedAt: new Date().toISOString(),
+            });
+          }
         }
         break;
       }

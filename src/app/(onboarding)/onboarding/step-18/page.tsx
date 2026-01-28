@@ -1,13 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 import Image from "next/image";
 import { useUserStore } from "@/lib/user-store";
+import { useOnboardingStore } from "@/lib/onboarding-store";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { generateUserId } from "@/lib/user-profile";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -54,11 +58,97 @@ const upsellOffers = [
 
 export default function Step18Page() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedOffers, setSelectedOffers] = useState<Set<string>>(new Set(["ultra-pack"]));
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [isAnalyzingPalm, setIsAnalyzingPalm] = useState(false);
   
-  const { unlockFeature, unlockAllFeatures } = useUserStore();
+  const { unlockFeature, unlockAllFeatures, purchaseSubscription, addCoins } = useUserStore();
+  const { birthMonth, birthDay, birthYear } = useOnboardingStore();
+
+  // Trigger palm reading analysis after successful payment
+  useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    if (sessionId) {
+      // User just completed payment - analyze palm and add coins
+      analyzePalmAfterPayment();
+    }
+  }, [searchParams]);
+
+  const analyzePalmAfterPayment = async () => {
+    // Check if reading already exists
+    const userId = generateUserId();
+    try {
+      const existingDoc = await getDoc(doc(db, "palm_readings", userId));
+      if (existingDoc.exists() && existingDoc.data()?.reading) {
+        // Reading already exists, no need to analyze again
+        return;
+      }
+    } catch (err) {
+      console.error("Error checking existing reading:", err);
+    }
+
+    // Get palm image from localStorage
+    const palmImage = localStorage.getItem("palmcosmic_palm_image");
+    if (!palmImage) return;
+
+    setIsAnalyzingPalm(true);
+
+    try {
+      const birthDate = `${birthYear}-${birthMonth}-${birthDay}`;
+      const zodiacSign = calculateZodiacSign(birthMonth, birthDay);
+
+      const response = await fetch("/api/palm-reading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageData: palmImage,
+          birthDate,
+          zodiacSign,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.reading) {
+        // Save to Firebase
+        await setDoc(doc(db, "palm_readings", userId), {
+          reading: result.reading,
+          palmImageUrl: palmImage,
+          createdAt: new Date().toISOString(),
+          birthDate,
+          zodiacSign,
+        });
+      }
+    } catch (err) {
+      console.error("Palm analysis error:", err);
+    } finally {
+      setIsAnalyzingPalm(false);
+    }
+  };
+
+  // Helper function to calculate zodiac sign
+  const calculateZodiacSign = (month: string | number | null, day: string | number | null): string => {
+    const m = Number(month);
+    const d = Number(day);
+    if (!m || !d) return "Aries";
+    
+    const signs = [
+      { sign: "Capricorn", end: [1, 19] }, { sign: "Aquarius", end: [2, 18] },
+      { sign: "Pisces", end: [3, 20] }, { sign: "Aries", end: [4, 19] },
+      { sign: "Taurus", end: [5, 20] }, { sign: "Gemini", end: [6, 20] },
+      { sign: "Cancer", end: [7, 22] }, { sign: "Leo", end: [8, 22] },
+      { sign: "Virgo", end: [9, 22] }, { sign: "Libra", end: [10, 22] },
+      { sign: "Scorpio", end: [11, 21] }, { sign: "Sagittarius", end: [12, 21] },
+      { sign: "Capricorn", end: [12, 31] }
+    ];
+    
+    for (const { sign, end } of signs) {
+      if (m < end[0] || (m === end[0] && d <= end[1])) return sign;
+    }
+    return "Capricorn";
+  };
 
   const handleSelectOffer = (offerId: string) => {
     setSelectedOffers(prev => {

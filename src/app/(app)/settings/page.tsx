@@ -56,7 +56,7 @@ export default function SettingsPage() {
         <div className="sticky top-0 z-40 bg-[#0A0E1A]/95 backdrop-blur-sm">
           <div className="flex items-center justify-between px-4 py-3">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push("/profile")}
               className="w-10 h-10 flex items-center justify-center"
             >
               <ArrowLeft className="w-5 h-5 text-white" />

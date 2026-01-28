@@ -15,14 +15,12 @@ const subscriptionPlans = [
     name: "Weekly",
     price: "$4.99",
     period: "/week",
-    description: "Billed weekly",
   },
   {
     id: "monthly",
     name: "Monthly",
     price: "$9.99",
     period: "/month",
-    description: "Billed monthly",
     popular: true,
   },
   {
@@ -53,7 +51,8 @@ export default function ManageSubscriptionPage() {
     stripeSubscriptionId: null,
   });
 
-  const { subscriptionPlan } = useUserStore();
+  const { subscriptionPlan, setSubscriptionPlan } = useUserStore();
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSubscriptionStatus();
@@ -72,21 +71,30 @@ export default function ManageSubscriptionPage() {
           cycleEndDate: data.subscriptionEndDate || null,
           stripeSubscriptionId: data.stripeSubscriptionId || null,
         });
+        // Also get the subscription plan from Firebase
+        if (data.subscriptionPlan) {
+          setCurrentPlan(data.subscriptionPlan);
+          setSubscriptionPlan(data.subscriptionPlan);
+        }
       }
     } catch (error) {
       console.error("Error fetching subscription status:", error);
     }
   };
 
+  // Use currentPlan from Firebase if available, otherwise fall back to store
+  const activePlan = currentPlan || subscriptionPlan;
+
   const handleUpgrade = async (planId: string) => {
-    if (planId === subscriptionPlan) return; // Already on this plan
+    if (planId === activePlan) return; // Already on this plan
 
     setError("");
     setIsProcessing(true);
     setSelectedPlan(planId);
 
     try {
-      const response = await fetch("/api/stripe/create-checkout", {
+      // Use upgrade checkout (no trial) for existing subscribers
+      const response = await fetch("/api/stripe/create-upgrade-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -118,10 +126,10 @@ export default function ManageSubscriptionPage() {
   };
 
   const getPlanStatus = (planId: string) => {
-    if (planId === subscriptionPlan) return "current";
+    if (planId === activePlan) return "current";
     
     const planOrder = ["weekly", "monthly", "yearly"];
-    const currentIndex = planOrder.indexOf(subscriptionPlan || "");
+    const currentIndex = planOrder.indexOf(activePlan || "");
     const planIndex = planOrder.indexOf(planId);
     
     if (currentIndex === -1) return "upgrade"; // No current plan
@@ -226,7 +234,7 @@ export default function ManageSubscriptionPage() {
         <div className="sticky top-0 z-40 bg-[#0A0E1A]/95 backdrop-blur-sm">
           <div className="flex items-center justify-center px-4 py-3">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push("/settings")}
               className="absolute left-4 w-10 h-10 flex items-center justify-center"
             >
               <ArrowLeft className="w-5 h-5 text-white" />
@@ -238,7 +246,7 @@ export default function ManageSubscriptionPage() {
         <div className="flex-1 overflow-y-auto relative z-10">
           <div className="px-4 py-6 space-y-4">
             {/* Current Plan Info */}
-            {subscriptionPlan && (
+            {activePlan && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -250,7 +258,7 @@ export default function ManageSubscriptionPage() {
                   </div>
                   <div>
                     <p className="text-white/60 text-sm">Current Plan</p>
-                    <p className="text-primary text-lg font-bold capitalize">{subscriptionPlan}</p>
+                    <p className="text-primary text-lg font-bold capitalize">{activePlan}</p>
                   </div>
                 </div>
               </motion.div>
@@ -312,7 +320,7 @@ export default function ManageSubscriptionPage() {
                     <div className="flex items-center justify-between mt-2">
                       <div>
                         <h3 className="text-white font-semibold text-lg">{plan.name}</h3>
-                        <p className="text-white/50 text-sm">{plan.description}</p>
+                        {plan.description && <p className="text-white/50 text-sm">{plan.description}</p>}
                       </div>
                       <div className="text-right">
                         <p className="text-white text-2xl font-bold">{plan.price}</p>
@@ -342,7 +350,7 @@ export default function ManageSubscriptionPage() {
                           ) : isUpgrade ? (
                             "Upgrade"
                           ) : (
-                            "Switch Plan"
+                            "Downgrade"
                           )}
                         </Button>
                       )}
@@ -385,7 +393,7 @@ export default function ManageSubscriptionPage() {
             )}
 
             {/* Cancel Subscription */}
-            {subscriptionPlan && !subscriptionStatus.isCancelled && (
+            {activePlan && !subscriptionStatus.isCancelled && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}

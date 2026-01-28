@@ -146,7 +146,7 @@ export default function BirthChartPage() {
         {/* Header */}
         <div className="sticky top-0 z-40 bg-[#0A0E1A]/95 backdrop-blur-sm border-b border-white/10">
           <div className="flex items-center gap-4 px-4 py-3">
-            <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center">
+            <button onClick={() => router.push("/reports")} className="w-10 h-10 flex items-center justify-center">
               <ArrowLeft className="w-5 h-5 text-white" />
             </button>
             <h1 className="text-white text-xl font-semibold flex-1 text-center pr-10">Your Birth Chart</h1>

@@ -238,7 +238,7 @@ export default function Step13Page() {
                     loop
                     muted
                     playsInline
-                    className="w-full h-full object-cover"
+                    className="w-full h-full"
                   />
                 </div>
               </motion.div>
