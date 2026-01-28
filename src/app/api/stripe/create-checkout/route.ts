@@ -30,7 +30,18 @@ export async function POST(request: NextRequest) {
     if (!plan || !priceId) {
       console.log("Missing price ID for plan:", plan, "Available:", PRICE_IDS);
       return NextResponse.json(
-        { error: `Price ID not configured for plan: ${plan}. Add STRIPE_PRICE_${plan.toUpperCase()} to .env.local` },
+        {
+          error: `Price ID not configured for plan: ${plan}. Add STRIPE_PRICE_${plan.toUpperCase()} to .env.local`,
+          debug: {
+            plan,
+            vercelEnv: process.env.VERCEL_ENV || null,
+            nodeEnv: process.env.NODE_ENV || null,
+            hasStripeSecretKey: !!process.env.STRIPE_SECRET_KEY,
+            hasWeeklyPrice: !!process.env.STRIPE_PRICE_WEEKLY,
+            hasMonthlyPrice: !!process.env.STRIPE_PRICE_MONTHLY,
+            hasYearlyPrice: !!process.env.STRIPE_PRICE_YEARLY,
+          },
+        },
         { status: 400 }
       );
     }
