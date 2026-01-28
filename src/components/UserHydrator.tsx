@@ -3,6 +3,7 @@
 import { useCallback, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { useUserStore } from "@/lib/user-store";
 
 export default function UserHydrator() {
@@ -18,8 +19,14 @@ export default function UserHydrator() {
   };
 
   const hydrate = useCallback(async () => {
-    const userId = localStorage.getItem("palmcosmic_user_id");
+    const authUid = auth.currentUser?.uid || null;
+    const storedId = localStorage.getItem("palmcosmic_user_id");
+    const userId = authUid || storedId;
     if (!userId) return;
+
+    if (authUid && storedId !== authUid) {
+      localStorage.setItem("palmcosmic_user_id", authUid);
+    }
 
     try {
       const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
@@ -70,9 +77,13 @@ export default function UserHydrator() {
       }
 
       const unlocked = data.unlockedFeatures || {};
-      if (unlocked.prediction2026) unlockFeature("prediction2026");
-      if (unlocked.birthChart) unlockFeature("birthChart");
-      if (unlocked.compatibilityTest) unlockFeature("compatibilityTest");
+      const hasPrediction2026 = !!(unlocked.prediction2026 || unlocked["unlockedFeatures.prediction2026"]);
+      const hasBirthChart = !!(unlocked.birthChart || unlocked["unlockedFeatures.birthChart"]);
+      const hasCompatibility = !!(unlocked.compatibilityTest || unlocked["unlockedFeatures.compatibilityTest"]);
+
+      if (hasPrediction2026) unlockFeature("prediction2026");
+      if (hasBirthChart) unlockFeature("birthChart");
+      if (hasCompatibility) unlockFeature("compatibilityTest");
     } catch (err) {
       console.error("Failed to hydrate user:", err);
     }

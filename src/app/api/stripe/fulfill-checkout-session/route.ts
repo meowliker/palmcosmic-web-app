@@ -10,14 +10,14 @@ function offersToUnlockedFeatures(offers: string[]) {
 
   for (const offer of offers) {
     if (offer === "ultra-pack") {
-      updates["unlockedFeatures.prediction2026"] = true;
-      updates["unlockedFeatures.birthChart"] = true;
-      updates["unlockedFeatures.compatibilityTest"] = true;
+      updates["prediction2026"] = true;
+      updates["birthChart"] = true;
+      updates["compatibilityTest"] = true;
       continue;
     }
-    if (offer === "2026-predictions") updates["unlockedFeatures.prediction2026"] = true;
-    if (offer === "birth-chart") updates["unlockedFeatures.birthChart"] = true;
-    if (offer === "compatibility") updates["unlockedFeatures.compatibilityTest"] = true;
+    if (offer === "2026-predictions") updates["prediction2026"] = true;
+    if (offer === "birth-chart") updates["birthChart"] = true;
+    if (offer === "compatibility") updates["compatibilityTest"] = true;
   }
 
   return updates;
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       const unlockUpdates = offersToUnlockedFeatures(offerList);
       await userRef.set(
         {
-          ...unlockUpdates,
+          unlockedFeatures: unlockUpdates,
           updatedAt: now,
         },
         { merge: true }
@@ -120,7 +120,9 @@ export async function POST(request: NextRequest) {
       if (feature) {
         await userRef.set(
           {
-            [`unlockedFeatures.${feature}`]: true,
+            unlockedFeatures: {
+              [feature]: true,
+            },
             updatedAt: now,
           },
           { merge: true }

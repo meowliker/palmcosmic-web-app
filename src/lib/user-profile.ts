@@ -1,4 +1,5 @@
 import { db } from "./firebase";
+import { auth } from "./firebase";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
 
@@ -94,6 +95,12 @@ export function calculateZodiacSign(month: string, day: string): string {
 // Generate a unique user ID from device/browser
 export function generateUserId(): string {
   if (typeof window === "undefined") return "server";
+
+  const authUid = auth.currentUser?.uid;
+  if (authUid) {
+    localStorage.setItem("palmcosmic_user_id", authUid);
+    return authUid;
+  }
 
   const currentId = localStorage.getItem("palmcosmic_user_id");
   if (currentId) return currentId;
