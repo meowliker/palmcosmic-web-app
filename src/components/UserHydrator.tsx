@@ -1,0 +1,74 @@
+"use client";
+
+import { useCallback, useEffect } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useUserStore } from "@/lib/user-store";
+
+export default function UserHydrator() {
+  const { setSubscriptionPlan, setCoins, setFirebaseUserId, unlockFeature, unlockAllFeatures } = useUserStore();
+
+  const normalizePlan = (plan: any): "weekly" | "monthly" | "yearly" | null => {
+    if (!plan) return null;
+    const p = String(plan).toLowerCase().trim();
+    if (p === "weekly" || p.includes("week")) return "weekly";
+    if (p === "monthly" || p.includes("month")) return "monthly";
+    if (p === "yearly" || p.includes("year") || p.includes("annual")) return "yearly";
+    return null;
+  };
+
+  const hydrate = useCallback(async () => {
+    const userId = localStorage.getItem("palmcosmic_user_id");
+    if (!userId) return;
+
+    try {
+      const snap = await getDoc(doc(db, "users", userId));
+      if (!snap.exists()) return;
+
+      const data: any = snap.data();
+
+      setFirebaseUserId(userId);
+
+      if (Object.prototype.hasOwnProperty.call(data, "subscriptionPlan")) {
+        setSubscriptionPlan(normalizePlan(data.subscriptionPlan));
+      }
+
+      if (typeof data.coins === "number") {
+        setCoins(data.coins);
+      }
+
+      if (data.isDevTester === true) {
+        unlockAllFeatures();
+        setCoins(typeof data.coins === "number" ? data.coins : 999999);
+        setSubscriptionPlan(normalizePlan(data.subscriptionPlan) ?? "yearly");
+        return;
+      }
+
+      const unlocked = data.unlockedFeatures || {};
+      if (unlocked.prediction2026) unlockFeature("prediction2026");
+      if (unlocked.birthChart) unlockFeature("birthChart");
+      if (unlocked.compatibilityTest) unlockFeature("compatibilityTest");
+    } catch (err) {
+      console.error("Failed to hydrate user:", err);
+    }
+  }, [setSubscriptionPlan, setCoins, setFirebaseUserId, unlockAllFeatures, unlockFeature]);
+
+  useEffect(() => {
+    hydrate();
+
+    const onPageShow = () => hydrate();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") hydrate();
+    };
+
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [hydrate]);
+
+  return null;
+}

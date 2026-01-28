@@ -54,8 +54,38 @@ export default function ManageSubscriptionPage() {
   const { subscriptionPlan, setSubscriptionPlan } = useUserStore();
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
 
+  const normalizePlan = (plan: any): "weekly" | "monthly" | "yearly" | null => {
+    if (!plan) return null;
+    const p = String(plan).toLowerCase().trim();
+    if (p === "weekly" || p.includes("week")) return "weekly";
+    if (p === "monthly" || p.includes("month")) return "monthly";
+    if (p === "yearly" || p.includes("year") || p.includes("annual")) return "yearly";
+    return null;
+  };
+
   useEffect(() => {
     fetchSubscriptionStatus();
+  }, []);
+
+  useEffect(() => {
+    const handlePageShow = () => {
+      setIsProcessing(false);
+      setSelectedPlan(null);
+      fetchSubscriptionStatus();
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("upgraded") === "true") {
+        fetchSubscriptionStatus();
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   const fetchSubscriptionStatus = async () => {
@@ -72,9 +102,29 @@ export default function ManageSubscriptionPage() {
           stripeSubscriptionId: data.stripeSubscriptionId || null,
         });
         // Also get the subscription plan from Firebase
-        if (data.subscriptionPlan) {
-          setCurrentPlan(data.subscriptionPlan);
-          setSubscriptionPlan(data.subscriptionPlan);
+        const normalized = normalizePlan((data as any).subscriptionPlan);
+        setCurrentPlan(normalized);
+        setSubscriptionPlan(normalized);
+
+        if (!normalized && (data as any).stripeSubscriptionId) {
+          try {
+            const res = await fetch("/api/stripe/resolve-subscription-plan", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId, subscriptionId: (data as any).stripeSubscriptionId }),
+            });
+
+            const resolved = await res.json();
+            if (res.ok) {
+              const resolvedPlan = normalizePlan(resolved.plan);
+              if (resolvedPlan) {
+                setCurrentPlan(resolvedPlan);
+                setSubscriptionPlan(resolvedPlan);
+              }
+            }
+          } catch (err) {
+            console.error("Failed to resolve subscription plan:", err);
+          }
         }
       }
     } catch (error) {
@@ -82,8 +132,7 @@ export default function ManageSubscriptionPage() {
     }
   };
 
-  // Use currentPlan from Firebase if available, otherwise fall back to store
-  const activePlan = currentPlan || subscriptionPlan;
+  const activePlan = currentPlan || normalizePlan(subscriptionPlan);
 
   const handleUpgrade = async (planId: string) => {
     if (planId === activePlan) return; // Already on this plan
@@ -132,7 +181,7 @@ export default function ManageSubscriptionPage() {
     const currentIndex = planOrder.indexOf(activePlan || "");
     const planIndex = planOrder.indexOf(planId);
     
-    if (currentIndex === -1) return "upgrade"; // No current plan
+    if (currentIndex === -1) return "upgrade";
     if (planIndex > currentIndex) return "upgrade";
     return "downgrade";
   };

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Lock, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserStore, featureNames, featurePrices, UnlockedFeatures } from "@/lib/user-store";
+import { generateUserId } from "@/lib/user-profile";
 
 // Map feature keys to report IDs for Stripe checkout
 const featureToReportId: Record<keyof UnlockedFeatures, string> = {
@@ -25,6 +26,12 @@ export function UpsellPopup({ isOpen, onClose, feature, onPurchase }: UpsellPopu
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const handlePageShow = () => setIsProcessing(false);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
   const handlePurchase = async () => {
     setIsProcessing(true);
     setError("");
@@ -38,8 +45,9 @@ export function UpsellPopup({ isOpen, onClose, feature, onPurchase }: UpsellPopu
         body: JSON.stringify({
           type: "report",
           packageId: reportId,
-          userId: "",
+          userId: generateUserId(),
           email: localStorage.getItem("palmcosmic_email") || "",
+          cancelPath: "/reports?cancelled=true",
         }),
       });
 

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getAdminDb } from "@/lib/firebase-admin";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -27,11 +26,16 @@ export async function POST(request: NextRequest) {
 
     // Update Firebase with cancellation status
     if (userId) {
-      await updateDoc(doc(db, "users", userId), {
-        subscriptionCancelled: true,
-        subscriptionEndDate: cycleEndDate,
-        updatedAt: new Date().toISOString(),
-      });
+      const adminDb = getAdminDb();
+      const now = new Date().toISOString();
+      await adminDb.collection("users").doc(userId).set(
+        {
+          subscriptionCancelled: true,
+          subscriptionEndDate: cycleEndDate,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
     }
 
     return NextResponse.json({

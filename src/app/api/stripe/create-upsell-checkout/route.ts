@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode: "payment", // One-time payment, not subscription
       payment_method_types: ["card"],
+      allow_promotion_codes: true,
       line_items: lineItems,
       success_url: `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}`,
       cancel_url: `${baseUrl}/onboarding/step-18?cancelled=true`,

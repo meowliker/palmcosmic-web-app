@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getAdminDb } from "@/lib/firebase-admin";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,26 +14,31 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let userDoc;
-    
+    const adminDb = getAdminDb();
+
+    let userData: any = null;
+
     if (userId) {
-      userDoc = await getDoc(doc(db, "users", userId));
+      const snap = await adminDb.collection("users").doc(userId).get();
+      if (snap.exists) userData = snap.data();
     }
 
-    if (!userDoc?.exists() && email) {
-      // Try to find user by email in a different way if needed
-      // For now, we'll just use the userId approach
+    if (!userData && email) {
+      const qs = await adminDb
+        .collection("users")
+        .where("email", "==", email.toLowerCase())
+        .limit(1)
+        .get();
+      if (!qs.empty) userData = qs.docs[0].data();
     }
 
-    if (!userDoc?.exists()) {
+    if (!userData) {
       return NextResponse.json({
         trialCompleted: false,
         hasSubscription: false,
         subscriptionStatus: null,
       });
     }
-
-    const userData = userDoc.data();
 
     return NextResponse.json({
       trialCompleted: userData.trialCompleted || false,

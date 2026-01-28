@@ -76,6 +76,18 @@ function Step18Content() {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    const handlePageShow = () => setIsProcessing(false);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("cancelled") === "true") {
+      setIsProcessing(false);
+    }
+  }, [searchParams]);
+
   const analyzePalmAfterPayment = async () => {
     // Check if reading already exists
     const userId = generateUserId();
@@ -198,7 +210,7 @@ function Step18Content() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           selectedOffers: Array.from(selectedOffers),
-          userId: "",
+          userId: generateUserId(),
           email: localStorage.getItem("palmcosmic_email") || "",
         }),
       });

@@ -8,10 +8,13 @@ import { ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2, X, KeyRound } from "lucide
 import { Button } from "@/components/ui/button";
 import { 
   signInWithEmailAndPassword, 
+  signInWithCustomToken,
   sendPasswordResetEmail
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useUserStore } from "@/lib/user-store";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -66,9 +69,26 @@ export default function LoginPage() {
       
       // Set access cookie via API
       try {
-        await fetch("/api/session", { method: "POST" });
+        await fetch("/api/session", { method: "POST", credentials: "include" });
       } catch (err) {
         console.error("Failed to set session:", err);
+      }
+
+      // Hydrate store from Firestore
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (snap.exists()) {
+          const data: any = snap.data();
+          if (Object.prototype.hasOwnProperty.call(data, "subscriptionPlan")) {
+            setSubscriptionPlan(data.subscriptionPlan ?? null);
+          }
+          if (typeof data.coins === "number") {
+            setCoins(data.coins);
+          }
+          setFirebaseUserId(user.uid);
+        }
+      } catch (err) {
+        console.error("Failed to hydrate user after login:", err);
       }
       
       // Redirect to dashboard
@@ -78,6 +98,9 @@ export default function LoginPage() {
       
       // Handle specific Firebase errors
       switch (err.code) {
+        case "auth/unauthorized-domain":
+          setError("Login is misconfigured (unauthorized domain). Please contact support.");
+          break;
         case "auth/user-not-found":
           setError("No account found with this email. Please sign up first.");
           break;
@@ -180,22 +203,30 @@ export default function LoginPage() {
         throw new Error(data.error || "Invalid OTP");
       }
 
+      if (data.customToken) {
+        try {
+          await signInWithCustomToken(auth, data.customToken);
+        } catch (err) {
+          console.error("Failed to sign in with custom token:", err);
+        }
+      }
+
       // Login successful
       localStorage.setItem("palmcosmic_user_id", data.user.id);
       localStorage.setItem("palmcosmic_email", data.user.email);
       
       // Update user store
-      if (data.user.subscriptionPlan) {
-        setSubscriptionPlan(data.user.subscriptionPlan);
+      if (Object.prototype.hasOwnProperty.call(data.user, "subscriptionPlan")) {
+        setSubscriptionPlan(data.user.subscriptionPlan ?? null);
       }
-      if (data.user.coins) {
+      if (typeof data.user.coins === "number") {
         setCoins(data.user.coins);
       }
       setFirebaseUserId(data.user.id);
 
       // Set session
       try {
-        await fetch("/api/session", { method: "POST" });
+        await fetch("/api/session", { method: "POST", credentials: "include" });
       } catch (err) {
         console.error("Failed to set session:", err);
       }

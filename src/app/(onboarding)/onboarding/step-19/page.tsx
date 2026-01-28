@@ -8,6 +8,9 @@ import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, ThumbsUp } from "lucide-react";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { saveUserProfile } from "@/lib/user-profile";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -69,13 +72,88 @@ export default function Step19Page() {
     setPasswordError(null);
 
     setIsLoading(true);
-    
+
     try {
-      // Get palm image from localStorage
+      const anonId = localStorage.getItem("palmcosmic_anon_id") || localStorage.getItem("palmcosmic_user_id");
+
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const uid = userCredential.user.uid;
+
+      localStorage.setItem("palmcosmic_user_id", uid);
+      localStorage.setItem("palmcosmic_email", email);
+      if (anonId) localStorage.setItem("palmcosmic_prev_anon_id", anonId);
+
+      try {
+        await fetch("/api/session", { method: "POST" });
+      } catch (err) {
+        console.error("Failed to set session:", err);
+      }
+
+      await setDoc(
+        doc(db, "users", uid),
+        {
+          email: email.toLowerCase(),
+          subscriptionPlan: null,
+          subscriptionStatus: "none",
+          coins: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      if (anonId && anonId !== uid) {
+        try {
+          const anonUserSnap = await getDoc(doc(db, "users", anonId));
+          const uidUserSnap = await getDoc(doc(db, "users", uid));
+          if (anonUserSnap.exists()) {
+            const anonData: any = anonUserSnap.data();
+            const uidData: any = uidUserSnap.exists() ? uidUserSnap.data() : {};
+
+            const mergedUnlocked = {
+              ...(uidData.unlockedFeatures || {}),
+              ...(anonData.unlockedFeatures || {}),
+            };
+
+            const mergedCoins = (uidData.coins || 0) + (anonData.coins || 0);
+            const mergedPlan = uidData.subscriptionPlan || anonData.subscriptionPlan || null;
+            const mergedStatus = uidData.subscriptionStatus || anonData.subscriptionStatus || "none";
+
+            await setDoc(
+              doc(db, "users", uid),
+              {
+                coins: mergedCoins,
+                subscriptionPlan: mergedPlan,
+                subscriptionStatus: mergedStatus,
+                unlockedFeatures: mergedUnlocked,
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            );
+          }
+        } catch (err) {
+          console.error("Failed to migrate anon entitlements:", err);
+        }
+
+        const migrateDoc = async (collectionName: string) => {
+          try {
+            const oldSnap = await getDoc(doc(db, collectionName, anonId));
+            if (!oldSnap.exists()) return;
+            await setDoc(doc(db, collectionName, uid), oldSnap.data(), { merge: true });
+          } catch (err) {
+            console.error(`Failed to migrate ${collectionName}:`, err);
+          }
+        };
+
+        await migrateDoc("user_profiles");
+        await migrateDoc("palm_readings");
+        await migrateDoc("chat_messages");
+      }
+
       const palmImage = localStorage.getItem("palmcosmic_palm_image");
-      
-      // Save user profile to Firebase with all onboarding data
+
       await saveUserProfile({
+        userId: uid,
         email,
         gender: onboardingData.gender,
         birthMonth: onboardingData.birthMonth,
@@ -90,21 +168,19 @@ export default function Step19Page() {
         goals: onboardingData.goals,
         colorPreference: onboardingData.colorPreference,
         elementPreference: onboardingData.elementPreference,
-        // Include zodiac signs
         sunSign: onboardingData.sunSign,
         moonSign: onboardingData.moonSign,
         ascendantSign: onboardingData.ascendantSign,
-        // Include palm image
         palmImage: palmImage || null,
-        // Timestamps
         createdAt: new Date().toISOString(),
       });
+
+      setShowSuccess(true);
     } catch (err) {
-      console.error("Failed to save user profile:", err);
+      console.error("Sign up failed:", err);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
-    setShowSuccess(true);
   };
 
   const handleContinue = () => {

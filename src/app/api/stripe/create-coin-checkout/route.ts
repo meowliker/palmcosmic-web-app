@@ -20,7 +20,7 @@ const REPORTS: Record<string, { amount: number; name: string; feature: string }>
 
 export async function POST(request: NextRequest) {
   try {
-    const { type, packageId, userId, email } = await request.json();
+    const { type, packageId, userId, email, successPath, cancelPath } = await request.json();
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
     // Get the base URL - use request origin as fallback
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "https://palmcosmic-web-app.vercel.app";
     let successUrl = `${baseUrl}/dashboard?purchase_success=true`;
+    let cancelUrl = `${baseUrl}/chat?cancelled=true`;
 
     if (type === "coins") {
       const coinPackage = COIN_PACKAGES[packageId];
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
       metadata.type = "coins";
       metadata.coins = coinPackage.coins.toString();
       successUrl = `${baseUrl}/chat?coins_purchased=${coinPackage.coins}`;
+      cancelUrl = `${baseUrl}/chat?cancelled=true`;
 
     } else if (type === "report") {
       const report = REPORTS[packageId];
@@ -87,6 +89,7 @@ export async function POST(request: NextRequest) {
       metadata.feature = report.feature;
       metadata.reportId = packageId;
       successUrl = `${baseUrl}/dashboard?report_unlocked=${report.feature}`;
+      cancelUrl = `${baseUrl}/reports?cancelled=true`;
 
     } else {
       return NextResponse.json(
@@ -95,12 +98,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (typeof successPath === "string" && successPath.startsWith("/")) {
+      successUrl = `${baseUrl}${successPath}`;
+    }
+    if (typeof cancelPath === "string" && cancelPath.startsWith("/")) {
+      cancelUrl = `${baseUrl}${cancelPath}`;
+    }
+
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode: "payment",
       payment_method_types: ["card"],
+      allow_promotion_codes: true,
       line_items: lineItems,
       success_url: successUrl,
-      cancel_url: `${baseUrl}/chat?cancelled=true`,
+      cancel_url: cancelUrl,
       metadata,
     };
 

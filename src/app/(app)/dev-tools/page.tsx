@@ -11,6 +11,9 @@ import { useOnboardingStore } from "@/lib/onboarding-store";
 export default function DevToolsPage() {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
+  const [devPassword, setDevPassword] = useState("");
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState("");
 
   const {
     subscriptionPlan,
@@ -45,6 +48,45 @@ export default function DevToolsPage() {
     setTimeout(() => setMessage(null), 2000);
   };
 
+  const handleActivateTester = async () => {
+    setActivateError("");
+
+    const userId = localStorage.getItem("palmcosmic_user_id");
+    if (!userId) {
+      setActivateError("No userId found. Please log in first.");
+      return;
+    }
+    if (!devPassword) {
+      setActivateError("Enter the dev password.");
+      return;
+    }
+
+    setActivating(true);
+    try {
+      const res = await fetch("/api/dev/activate-tester", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: devPassword, userId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setActivateError(data.error || "Failed to activate");
+        return;
+      }
+
+      unlockAllFeatures();
+      setCoins(999999);
+      showMessage("Dev tester enabled");
+      setDevPassword("");
+    } catch (err) {
+      console.error("Activate tester failed:", err);
+      setActivateError("Something went wrong.");
+    } finally {
+      setActivating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
       <div className="w-full max-w-md min-h-screen bg-[#0A0E1A] overflow-hidden shadow-2xl shadow-black/50 flex flex-col">
@@ -74,6 +116,37 @@ export default function DevToolsPage() {
         )}
 
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+          {/* Dev Tester */}
+          <div className="bg-[#1A1F2E] rounded-2xl p-4 border border-white/10">
+            <h2 className="text-white font-semibold mb-3 flex items-center gap-2">
+              <Lock className="w-4 h-4" /> Dev Tester Access
+            </h2>
+
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={devPassword}
+                onChange={(e) => setDevPassword(e.target.value)}
+                placeholder="Enter global dev password"
+                className="w-full h-11 px-4 bg-[#0A0E1A] border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-primary"
+              />
+
+              {activateError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                  <p className="text-red-400 text-sm text-center">{activateError}</p>
+                </div>
+              )}
+
+              <Button
+                onClick={handleActivateTester}
+                disabled={activating}
+                className="w-full"
+              >
+                {activating ? "Activating..." : "Activate Dev Tester"}
+              </Button>
+            </div>
+          </div>
+
           {/* Current State */}
           <div className="bg-[#1A1F2E] rounded-2xl p-4 border border-white/10">
             <h2 className="text-white font-semibold mb-3 flex items-center gap-2">

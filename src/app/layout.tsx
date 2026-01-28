@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
-import DisableBackButton from "@/components/DisableBackButton";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -29,7 +28,6 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${cormorant.variable} font-sans antialiased min-h-screen`}
       >
-        <DisableBackButton />
         {children}
       </body>
     </html>

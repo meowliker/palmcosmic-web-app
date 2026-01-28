@@ -1,33 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 
 export async function POST(request: NextRequest) {
   try {
     const { email, otp } = await request.json();
 
-    if (!email || !otp) {
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const normalizedOtp = typeof otp === "string" ? otp.trim() : String(otp ?? "").trim();
+
+    if (!normalizedEmail || !normalizedOtp) {
       return NextResponse.json(
         { success: false, error: "Email and OTP are required" },
         { status: 400 }
       );
     }
 
-    // Get stored OTP
-    const otpDoc = await getDoc(doc(db, "otp_codes", email.toLowerCase()));
+    const adminDb = getAdminDb();
+    const adminAuth = getAdminAuth();
 
-    if (!otpDoc.exists()) {
+    // Get stored OTP
+    const otpDoc = await adminDb.collection("otp_codes").doc(normalizedEmail).get();
+
+    if (!otpDoc.exists) {
       return NextResponse.json(
         { success: false, error: "No OTP found. Please request a new code." },
         { status: 404 }
       );
     }
 
-    const otpData = otpDoc.data();
+    const otpData: any = otpDoc.data();
 
     // Check if OTP is expired
     if (new Date(otpData.expiresAt) < new Date()) {
-      await deleteDoc(doc(db, "otp_codes", email.toLowerCase()));
+      await adminDb.collection("otp_codes").doc(normalizedEmail).delete();
       return NextResponse.json(
         { success: false, error: "OTP has expired. Please request a new code." },
         { status: 400 }
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify OTP
-    if (otpData.otp !== otp) {
+    if (String(otpData.otp) !== normalizedOtp) {
       return NextResponse.json(
         { success: false, error: "Invalid OTP. Please try again." },
         { status: 400 }
@@ -43,9 +48,11 @@ export async function POST(request: NextRequest) {
     }
 
     // OTP is valid - get user data
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("email", "==", email.toLowerCase()));
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await adminDb
+      .collection("users")
+      .where("email", "==", normalizedEmail)
+      .limit(1)
+      .get();
 
     if (querySnapshot.empty) {
       return NextResponse.json(
@@ -57,15 +64,50 @@ export async function POST(request: NextRequest) {
     const userDoc = querySnapshot.docs[0];
     const userData = userDoc.data();
 
+    // Determine canonical uid (Firebase Auth uid)
+    let uid: string | null = null;
+    try {
+      const authUser = await adminAuth.getUserByEmail(normalizedEmail);
+      uid = authUser.uid;
+    } catch {
+      // If user exists in Firestore but not in Auth (legacy), create an Auth user.
+      const created = await adminAuth.createUser({ email: normalizedEmail });
+      uid = created.uid;
+    }
+
+    // Ensure there is a users/{uid} doc. If legacy doc id differs, copy/migrate.
+    if (uid && uid !== userDoc.id) {
+      await adminDb.collection("users").doc(uid).set(
+        {
+          ...userData,
+          email: normalizedEmail,
+          migratedFromUserId: userDoc.id,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } else if (uid) {
+      await adminDb.collection("users").doc(uid).set(
+        {
+          email: normalizedEmail,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    }
+
+    const customToken = uid ? await adminAuth.createCustomToken(uid) : null;
+
     // Delete used OTP
-    await deleteDoc(doc(db, "otp_codes", email.toLowerCase()));
+    await adminDb.collection("otp_codes").doc(normalizedEmail).delete();
 
     return NextResponse.json({
       success: true,
       message: "OTP verified successfully",
+      customToken,
       user: {
-        id: userDoc.id,
-        email: userData.email,
+        id: uid || userDoc.id,
+        email: normalizedEmail,
         name: userData.name,
         subscriptionPlan: userData.subscriptionPlan,
         coins: userData.coins,

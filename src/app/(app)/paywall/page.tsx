@@ -4,9 +4,42 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, Crown, Sparkles, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { generateUserId } from "@/lib/user-profile";
 
 export default function PaywallPage() {
   const router = useRouter();
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handlePageShow = () => setIsProcessing(null);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
+  const startCheckout = async (plan: "weekly" | "monthly" | "yearly") => {
+    setIsProcessing(plan);
+    try {
+      const response = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan,
+          userId: generateUserId(),
+          email: localStorage.getItem("palmcosmic_email") || "",
+        }),
+      });
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+    } catch (err) {
+      console.error("Paywall checkout error:", err);
+    } finally {
+      setIsProcessing(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
@@ -15,7 +48,7 @@ export default function PaywallPage() {
         <div className="sticky top-0 z-40 bg-[#0A0E1A]/95 backdrop-blur-sm">
           <div className="flex items-center justify-between px-4 py-3">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push("/reports")}
               className="w-10 h-10 flex items-center justify-center"
             >
               <X className="w-5 h-5 text-white" />
@@ -67,9 +100,13 @@ export default function PaywallPage() {
                     <p className="text-white/50 text-sm">/year</p>
                   </div>
                 </div>
-                <Button className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-black font-semibold rounded-full">
+                <Button
+                  onClick={() => startCheckout("yearly")}
+                  disabled={isProcessing !== null}
+                  className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-black font-semibold rounded-full"
+                >
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Start 2-Week Free Trial
+                  {isProcessing === "yearly" ? "Processing..." : "Start 2-Week Free Trial"}
                 </Button>
               </div>
 
@@ -88,8 +125,12 @@ export default function PaywallPage() {
                     <p className="text-white/50 text-sm">/month</p>
                   </div>
                 </div>
-                <Button className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-white font-semibold rounded-full">
-                  Start 1-Week Free Trial
+                <Button
+                  onClick={() => startCheckout("monthly")}
+                  disabled={isProcessing !== null}
+                  className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-white font-semibold rounded-full"
+                >
+                  {isProcessing === "monthly" ? "Processing..." : "Start 1-Week Free Trial"}
                 </Button>
               </div>
 
@@ -105,8 +146,13 @@ export default function PaywallPage() {
                     <p className="text-white/50 text-sm">/week</p>
                   </div>
                 </div>
-                <Button variant="outline" className="w-full border-white/20 text-white hover:bg-white/10 rounded-full">
-                  Start 3-Day Free Trial
+                <Button
+                  onClick={() => startCheckout("weekly")}
+                  disabled={isProcessing !== null}
+                  variant="outline"
+                  className="w-full border-white/20 text-white hover:bg-white/10 rounded-full"
+                >
+                  {isProcessing === "weekly" ? "Processing..." : "Start 3-Day Free Trial"}
                 </Button>
               </div>
             </motion.div>

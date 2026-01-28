@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import nodemailer from "nodemailer";
 
 // Generate 6-digit OTP
@@ -23,37 +22,66 @@ export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json();
 
-    if (!email) {
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+
+    if (!normalizedEmail) {
       return NextResponse.json(
         { success: false, error: "Email is required" },
         { status: 400 }
       );
     }
 
-    // Check if user exists in Firebase
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("email", "==", email.toLowerCase()));
-    const querySnapshot = await getDocs(q);
+    const adminDb = getAdminDb();
+    const adminAuth = getAdminAuth();
 
-    if (querySnapshot.empty) {
+    // Check if user exists in Firestore (preferred)
+    const querySnapshot = await adminDb
+      .collection("users")
+      .where("email", "==", normalizedEmail)
+      .limit(1)
+      .get();
+
+    let userId: string | null = querySnapshot.empty ? null : querySnapshot.docs[0]!.id;
+
+    // Fallback: user exists in Firebase Auth but Firestore doc missing (common prod issue)
+    if (!userId) {
+      try {
+        const authUser = await adminAuth.getUserByEmail(normalizedEmail);
+        userId = authUser.uid;
+
+        const existing = await adminDb.collection("users").doc(userId).get();
+        if (!existing.exists) {
+          await adminDb.collection("users").doc(userId).set(
+            {
+              email: normalizedEmail,
+              subscriptionPlan: null,
+              subscriptionStatus: "none",
+              coins: 0,
+              createdAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        }
+      } catch {
+        // ignore; will return USER_NOT_FOUND below
+      }
+    }
+
+    if (!userId) {
       return NextResponse.json(
         { success: false, error: "USER_NOT_FOUND", message: "No account found with this email" },
         { status: 404 }
       );
     }
 
-    // Get user data
-    const userDoc = querySnapshot.docs[0];
-    const userData = userDoc.data();
-
     // Generate OTP
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     // Store OTP in Firebase
-    await setDoc(doc(db, "otp_codes", email.toLowerCase()), {
+    await adminDb.collection("otp_codes").doc(normalizedEmail).set({
       otp,
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       expiresAt: expiresAt.toISOString(),
       createdAt: new Date().toISOString(),
       verified: false,
@@ -65,7 +93,7 @@ export async function POST(request: NextRequest) {
       
       await transporter.sendMail({
         from: `"PalmCosmic" <${process.env.EMAIL_USER}>`,
-        to: email,
+        to: normalizedEmail,
         subject: "Your PalmCosmic Verification Code",
         html: `
           <!DOCTYPE html>
@@ -107,14 +135,20 @@ export async function POST(request: NextRequest) {
         `,
       });
     } else {
-      // For development without email configured
-      console.log(`OTP for ${email}: ${otp}`);
+      if (process.env.NODE_ENV === "production") {
+        return NextResponse.json(
+          { success: false, error: "EMAIL_NOT_CONFIGURED", message: "Email sending is not configured" },
+          { status: 500 }
+        );
+      }
+
+      console.log(`OTP for ${normalizedEmail}: ${otp}`);
     }
 
     return NextResponse.json({
       success: true,
       message: "OTP sent successfully",
-      userId: userDoc.id,
+      userId,
     });
   } catch (error: any) {
     console.error("Send OTP error:", error);

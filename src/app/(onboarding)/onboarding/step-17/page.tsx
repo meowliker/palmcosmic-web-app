@@ -1,12 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Check, Shield, Coins } from "lucide-react";
 import { useUserStore, SubscriptionPlan } from "@/lib/user-store";
+import { generateUserId } from "@/lib/user-profile";
 
 const pricingPlans = [
   {
@@ -55,6 +56,12 @@ export default function Step17Page() {
   const [isProcessing, setIsProcessing] = useState(false);
   
   const { purchaseSubscription, unlockAllFeatures, setCoins } = useUserStore();
+
+  useEffect(() => {
+    const handlePageShow = () => setIsProcessing(false);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
 
   const handleApplyPromo = async () => {
     if (!promoCode.trim()) {
@@ -114,7 +121,7 @@ export default function Step17Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan: selectedPlan,
-          userId: "", // Will be set after registration
+          userId: generateUserId(),
           email: localStorage.getItem("palmcosmic_email") || "",
         }),
       });

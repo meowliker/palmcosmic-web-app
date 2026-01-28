@@ -94,18 +94,26 @@ export function calculateZodiacSign(month: string, day: string): string {
 // Generate a unique user ID from device/browser
 export function generateUserId(): string {
   if (typeof window === "undefined") return "server";
-  
-  let storedId = localStorage.getItem("palmcosmic_user_id");
-  if (storedId) return storedId;
-  
-  // Generate new ID
-  const newId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  localStorage.setItem("palmcosmic_user_id", newId);
-  return newId;
+
+  const currentId = localStorage.getItem("palmcosmic_user_id");
+  if (currentId) return currentId;
+
+  const anonIdKey = "palmcosmic_anon_id";
+  const existingAnonId = localStorage.getItem(anonIdKey);
+  if (existingAnonId) {
+    localStorage.setItem("palmcosmic_user_id", existingAnonId);
+    return existingAnonId;
+  }
+
+  const newAnonId = `anon_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  localStorage.setItem(anonIdKey, newAnonId);
+  localStorage.setItem("palmcosmic_user_id", newAnonId);
+  return newAnonId;
 }
 
 // Save user profile to Firestore
 export async function saveUserProfile(onboardingData: {
+  userId?: string;
   email?: string;
   gender: string | null;
   birthMonth: string;
@@ -126,14 +134,15 @@ export async function saveUserProfile(onboardingData: {
   palmImage?: string | null;
   createdAt?: string;
 }): Promise<UserProfile> {
-  const userId = generateUserId();
+  const { userId: providedUserId, ...rest } = onboardingData;
+  const userId = providedUserId || generateUserId();
   const zodiacSign = calculateZodiacSign(onboardingData.birthMonth, onboardingData.birthDay);
   
   const profile: UserProfile = {
     id: userId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    ...onboardingData,
+    ...rest,
     zodiacSign,
   };
 

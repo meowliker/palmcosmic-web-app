@@ -1,38 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { headers } from "next/headers";
-import { doc, updateDoc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { FieldValue } from "firebase-admin/firestore";
+import { getAdminDb } from "@/lib/firebase-admin";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-// Helper function to update user subscription in Firebase
-async function updateUserSubscription(userId: string, data: Record<string, any>) {
-  try {
-    const userRef = doc(db, "users", userId);
-    const userDoc = await getDoc(userRef);
-    
-    if (userDoc.exists()) {
-      await updateDoc(userRef, {
-        ...data,
-        updatedAt: new Date().toISOString(),
-      });
-    } else {
-      await setDoc(userRef, {
-        ...data,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+function getPlanCoins(plan?: string | null) {
+  if (plan === "weekly" || plan === "monthly") return 15;
+  if (plan === "yearly") return 30;
+  return 0;
+}
+
+function offersToUnlockedFeatures(offers: string[]) {
+  const updates: Record<string, boolean> = {};
+
+  for (const offer of offers) {
+    if (offer === "ultra-pack") {
+      updates["unlockedFeatures.prediction2026"] = true;
+      updates["unlockedFeatures.birthChart"] = true;
+      updates["unlockedFeatures.compatibilityTest"] = true;
+      continue;
     }
-  } catch (error) {
-    console.error("Error updating user subscription:", error);
+    if (offer === "2026-predictions") updates["unlockedFeatures.prediction2026"] = true;
+    if (offer === "birth-chart") updates["unlockedFeatures.birthChart"] = true;
+    if (offer === "compatibility") updates["unlockedFeatures.compatibilityTest"] = true;
   }
+
+  return updates;
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const adminDb = getAdminDb();
     const body = await request.text();
     const headersList = await headers();
     const signature = headersList.get("stripe-signature");
@@ -60,51 +62,106 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const { userId, plan, type, offers } = session.metadata || {};
-        
-        if (type === "upsell") {
-          // Handle upsell payment
-          console.log(`Upsell payment completed for user ${userId}, offers: ${offers}`);
-          
-          // TODO: Update user's unlocked features in Firebase
-          // const offerList = offers?.split(",") || [];
-          // await unlockUserFeatures(userId, offerList);
-          
-        } else if (type === "coins") {
-          // Handle coin purchase
-          const coins = session.metadata?.coins;
-          console.log(`Coin purchase completed for user ${userId}, coins: ${coins}`);
-          
-          // TODO: Add coins to user's account in Firebase
-          // await addCoinsToUser(userId, parseInt(coins || "0"));
-          
-        } else if (type === "report") {
-          // Handle individual report purchase
-          const feature = session.metadata?.feature;
-          console.log(`Report purchase completed for user ${userId}, feature: ${feature}`);
-          
-          // TODO: Unlock feature for user in Firebase
-          // await unlockUserFeature(userId, feature);
-          
-        } else {
-          // Handle subscription payment
-          console.log(`Subscription checkout completed for user ${userId}, plan: ${plan}`);
-          
-          // Add coins based on plan: weekly/monthly = 15 coins, yearly = 30 coins
-          let coinsToAdd = 0;
-          if (plan === "weekly" || plan === "monthly") {
-            coinsToAdd = 15;
-          } else if (plan === "yearly") {
-            coinsToAdd = 30;
+        const { userId, plan, type, offers, coins, feature } = session.metadata || {};
+        const resolvedUserId = (userId || "").trim();
+        const now = new Date().toISOString();
+
+        // Always store payment record (even if userId missing)
+        try {
+          const paymentRecord = {
+            eventType: event.type,
+            stripeEventId: event.id,
+            sessionId: session.id,
+            userId: resolvedUserId || null,
+            type: type || null,
+            plan: plan || null,
+            offers: offers || null,
+            feature: feature || null,
+            coins: coins || null,
+            customerEmail: session.customer_details?.email || session.customer_email || null,
+            amountTotal: session.amount_total ?? null,
+            currency: session.currency || null,
+            paymentStatus: session.payment_status || null,
+            createdAt: now,
+          };
+
+          if (resolvedUserId) {
+            await adminDb
+              .collection("users")
+              .doc(resolvedUserId)
+              .collection("payments")
+              .doc(session.id)
+              .set(paymentRecord, { merge: true });
           }
-          
-          if (userId) {
-            await updateUserSubscription(userId, {
-              subscriptionPlan: plan,
+
+          await adminDb.collection("payments").doc(session.id).set(paymentRecord, { merge: true });
+        } catch (err) {
+          console.error("Failed to persist payment record:", err);
+        }
+
+        if (!resolvedUserId) break;
+
+        const userRef = adminDb.collection("users").doc(resolvedUserId);
+
+        // Ensure base user fields exist
+        await userRef.set(
+          {
+            email: (session.customer_details?.email || session.customer_email || "").toLowerCase() || null,
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+
+        if (type === "upsell") {
+          const offerList = (offers || "").split(",").map((s) => s.trim()).filter(Boolean);
+          const unlockUpdates = offersToUnlockedFeatures(offerList);
+          await userRef.set(
+            {
+              ...unlockUpdates,
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+        } else if (type === "coins") {
+          const coinsToAdd = parseInt(coins || "0", 10) || 0;
+          if (coinsToAdd > 0) {
+            await userRef.set(
+              {
+                coins: FieldValue.increment(coinsToAdd),
+                updatedAt: now,
+              },
+              { merge: true }
+            );
+          }
+        } else if (type === "report") {
+          if (feature) {
+            await userRef.set(
+              {
+                [`unlockedFeatures.${feature}`]: true,
+                updatedAt: now,
+              },
+              { merge: true }
+            );
+          }
+        } else {
+          const coinsToAdd = getPlanCoins(plan || null);
+          await userRef.set(
+            {
+              subscriptionPlan: plan || null,
               subscriptionStatus: "active",
-              coins: coinsToAdd,
-              subscriptionStartedAt: new Date().toISOString(),
-            });
+              subscriptionStartedAt: now,
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+          if (coinsToAdd > 0) {
+            await userRef.set(
+              {
+                coins: FieldValue.increment(coinsToAdd),
+                updatedAt: now,
+              },
+              { merge: true }
+            );
           }
         }
         break;
@@ -127,23 +184,38 @@ export async function POST(request: NextRequest) {
         if (subData.trial_end && new Date(subData.trial_end * 1000) <= new Date()) {
           // Trial has ended
           if (userId) {
-            await updateUserSubscription(userId, {
-              trialCompleted: true,
-              trialEndedAt: new Date(subData.trial_end * 1000).toISOString(),
-            });
+            const now = new Date().toISOString();
+            await adminDb
+              .collection("users")
+              .doc(userId)
+              .set(
+                {
+                  trialCompleted: true,
+                  trialEndedAt: new Date(subData.trial_end * 1000).toISOString(),
+                  updatedAt: now,
+                },
+                { merge: true }
+              );
           }
         }
         
-        // Update subscription status
         if (userId) {
-          await updateUserSubscription(userId, {
-            stripeSubscriptionId: subscription.id,
-            subscriptionStatus: subData.status,
-            subscriptionPlan: subData.items?.data?.[0]?.price?.lookup_key || null,
-            currentPeriodEnd: subData.current_period_end 
-              ? new Date(subData.current_period_end * 1000).toISOString() 
-              : null,
-          });
+          const now = new Date().toISOString();
+          await adminDb
+            .collection("users")
+            .doc(userId)
+            .set(
+              {
+                stripeSubscriptionId: subscription.id,
+                subscriptionStatus: subData.status,
+                subscriptionPlan: subData.metadata?.plan || subData.items?.data?.[0]?.price?.lookup_key || null,
+                currentPeriodEnd: subData.current_period_end
+                  ? new Date(subData.current_period_end * 1000).toISOString()
+                  : null,
+                updatedAt: now,
+              },
+              { merge: true }
+            );
         }
         break;
       }
@@ -156,11 +228,19 @@ export async function POST(request: NextRequest) {
         console.log(`Subscription cancelled for user ${userId}`);
         
         if (userId) {
-          await updateUserSubscription(userId, {
-            subscriptionStatus: "cancelled",
-            subscriptionCancelled: true,
-            subscriptionEndedAt: new Date().toISOString(),
-          });
+          const now = new Date().toISOString();
+          await adminDb
+            .collection("users")
+            .doc(userId)
+            .set(
+              {
+                subscriptionStatus: "cancelled",
+                subscriptionCancelled: true,
+                subscriptionEndedAt: now,
+                updatedAt: now,
+              },
+              { merge: true }
+            );
         }
         break;
       }
@@ -174,12 +254,18 @@ export async function POST(request: NextRequest) {
         console.log(`Trial ending soon for user ${userId}`);
         
         if (userId) {
-          await updateUserSubscription(userId, {
-            trialEndingSoon: true,
-            trialEndDate: subData.trial_end 
-              ? new Date(subData.trial_end * 1000).toISOString() 
-              : null,
-          });
+          const now = new Date().toISOString();
+          await adminDb
+            .collection("users")
+            .doc(userId)
+            .set(
+              {
+                trialEndingSoon: true,
+                trialEndDate: subData.trial_end ? new Date(subData.trial_end * 1000).toISOString() : null,
+                updatedAt: now,
+              },
+              { merge: true }
+            );
         }
         break;
       }
@@ -192,11 +278,19 @@ export async function POST(request: NextRequest) {
         console.log("Payment succeeded for invoice:", invoice.id);
         
         if (userId) {
-          await updateUserSubscription(userId, {
-            paymentStatus: "succeeded",
-            lastPaymentDate: new Date().toISOString(),
-            subscriptionStatus: "active",
-          });
+          const now = new Date().toISOString();
+          await adminDb
+            .collection("users")
+            .doc(userId)
+            .set(
+              {
+                paymentStatus: "succeeded",
+                lastPaymentDate: now,
+                subscriptionStatus: "active",
+                updatedAt: now,
+              },
+              { merge: true }
+            );
         }
         break;
       }
@@ -209,11 +303,19 @@ export async function POST(request: NextRequest) {
         console.log("Payment failed for invoice:", invoice.id);
         
         if (userId) {
-          await updateUserSubscription(userId, {
-            paymentStatus: "failed",
-            paymentFailedAt: new Date().toISOString(),
-            subscriptionStatus: "past_due",
-          });
+          const now = new Date().toISOString();
+          await adminDb
+            .collection("users")
+            .doc(userId)
+            .set(
+              {
+                paymentStatus: "failed",
+                paymentFailedAt: now,
+                subscriptionStatus: "past_due",
+                updatedAt: now,
+              },
+              { merge: true }
+            );
         }
         break;
       }

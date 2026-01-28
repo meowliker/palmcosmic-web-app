@@ -1,3 +1,5 @@
+import UserHydrator from "@/components/UserHydrator";
+
 export default function AppLayout({
   children,
 }: {
@@ -5,6 +7,7 @@ export default function AppLayout({
 }) {
   return (
     <div className="min-h-screen bg-background">
+      <UserHydrator />
       <main className="flex-1">{children}</main>
     </div>
   );

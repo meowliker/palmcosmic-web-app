@@ -9,7 +9,7 @@ import Image from "next/image";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useUserStore } from "@/lib/user-store";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
 import { generateUserId } from "@/lib/user-profile";
 
 interface Message {
@@ -102,7 +102,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           type: "coins",
           packageId: coinPackageToStripeId[pkg.coins] || "coins-50",
-          userId: "",
+          userId: generateUserId(),
           email: localStorage.getItem("palmcosmic_email") || "",
         }),
       });
@@ -297,6 +297,16 @@ export default function ChatPage() {
         };
         setMessages((prev) => [...prev, assistantMessage]);
         deductCoins(3); // Deduct 3 coins per message
+
+        try {
+          const userId = generateUserId();
+          await updateDoc(doc(db, "users", userId), {
+            coins: increment(-3),
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          console.error("Failed to persist coin deduction:", err);
+        }
       }
     } catch (error) {
       console.error("Chat error:", error);
@@ -325,7 +335,7 @@ export default function ChatPage() {
         <div className="bg-[#1A1F2E] px-4 py-3 flex items-center justify-between border-b border-white/10">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push("/reports")}
             className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-white" />
