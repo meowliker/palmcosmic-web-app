@@ -33,7 +33,9 @@ export async function POST(request: NextRequest) {
     let metadata: Record<string, string> = {
       userId: userId || "",
     };
-    let successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?purchase_success=true`;
+    // Get the base URL - use request origin as fallback
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "https://palmcosmic-web-app.vercel.app";
+    let successUrl = `${baseUrl}/dashboard?purchase_success=true`;
 
     if (type === "coins") {
       const coinPackage = COIN_PACKAGES[packageId];
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
 
       metadata.type = "coins";
       metadata.coins = coinPackage.coins.toString();
-      successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?coins_purchased=${coinPackage.coins}`;
+      successUrl = `${baseUrl}/dashboard?coins_purchased=${coinPackage.coins}`;
 
     } else if (type === "report") {
       const report = REPORTS[packageId];
@@ -84,7 +86,7 @@ export async function POST(request: NextRequest) {
       metadata.type = "report";
       metadata.feature = report.feature;
       metadata.reportId = packageId;
-      successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?report_unlocked=${report.feature}`;
+      successUrl = `${baseUrl}/dashboard?report_unlocked=${report.feature}`;
 
     } else {
       return NextResponse.json(
@@ -98,7 +100,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ["card"],
       line_items: lineItems,
       success_url: successUrl,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?cancelled=true`,
+      cancel_url: `${baseUrl}/dashboard?cancelled=true`,
       metadata,
     };
 

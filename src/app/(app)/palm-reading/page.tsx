@@ -55,12 +55,35 @@ export default function PalmReadingPage() {
       
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setReading(data.reading);
-        setCapturedImage(data.palmImageUrl || null);
+        if (data.reading) {
+          setReading(data.reading);
+          setCapturedImage(data.palmImageUrl || null);
+          setLoading(false);
+          return;
+        }
       }
+      
+      // Check if palm image exists in localStorage (from onboarding)
+      const savedPalmImage = localStorage.getItem("palmcosmic_palm_image");
+      if (savedPalmImage) {
+        setCapturedImage(savedPalmImage);
+        // Auto-generate reading from the saved palm image
+        setLoading(false);
+        analyzePalm(savedPalmImage);
+        return;
+      }
+      
+      setLoading(false);
     } catch (err) {
       console.error("Failed to load reading:", err);
-    } finally {
+      // Still check localStorage as fallback
+      const savedPalmImage = localStorage.getItem("palmcosmic_palm_image");
+      if (savedPalmImage) {
+        setCapturedImage(savedPalmImage);
+        setLoading(false);
+        analyzePalm(savedPalmImage);
+        return;
+      }
       setLoading(false);
     }
   };

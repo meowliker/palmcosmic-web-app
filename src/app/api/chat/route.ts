@@ -12,11 +12,12 @@ interface UserProfile {
   moonSign?: string;
   ascendantSign?: string;
   hasPalmImage?: boolean;
+  palmReading?: any;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, userProfile, palmImageBase64, context } = await request.json();
+    const { message, userProfile, palmImageBase64, palmReading, context } = await request.json();
 
     if (!message) {
       return NextResponse.json(
@@ -28,10 +29,11 @@ export async function POST(request: NextRequest) {
     // Build personalized user context
     const profile = userProfile as UserProfile | undefined;
     let userContext = "";
+    let palmContext = "";
     
     if (profile) {
       userContext = `
-USER'S PERSONAL COSMIC PROFILE (Use this to give SPECIFIC, PERSONALIZED answers):
+USER'S COSMIC PROFILE:
 - Gender: ${profile.gender || "Not specified"}
 - Birth Date: ${profile.birthDate || "Not specified"}
 - Birth Time: ${profile.birthTime || "Not specified"}
@@ -40,36 +42,47 @@ USER'S PERSONAL COSMIC PROFILE (Use this to give SPECIFIC, PERSONALIZED answers)
 - Life Goals: ${profile.goals?.join(", ") || "Not specified"}
 - Sun Sign: ${profile.sunSign || "Unknown"}
 - Moon Sign: ${profile.moonSign || "Unknown"}  
-- Ascendant/Rising Sign: ${profile.ascendantSign || "Unknown"}
-- Has Palm Reading: ${profile.hasPalmImage ? "Yes" : "No"}
+- Rising Sign: ${profile.ascendantSign || "Unknown"}`;
+    }
 
-IMPORTANT: Always reference the user's SPECIFIC signs, birth details, and goals in your answers. 
-For example, if they ask about love, reference their ${profile.ascendantSign || "rising"} sign traits and ${profile.relationshipStatus || "relationship"} status.
-If they ask about career, reference their goals: ${profile.goals?.join(", ") || "their aspirations"}.
-Never give generic horoscope advice - always tie it back to THEIR specific chart.`;
+    // Add palm reading context if available
+    if (palmReading) {
+      palmContext = `
+PALM READING INSIGHTS:
+${palmReading.cosmicInsight ? `- Cosmic Insight: ${palmReading.cosmicInsight}` : ""}
+${palmReading.tabs?.love?.summary ? `- Love Line: ${palmReading.tabs.love.summary}` : ""}
+${palmReading.tabs?.wealth?.summary ? `- Wealth Line: ${palmReading.tabs.wealth.summary}` : ""}
+${palmReading.tabs?.ageTimeline?.stages ? `- Life Timeline: User has ${palmReading.tabs.ageTimeline.stages.length} life stages mapped` : ""}`;
     }
 
     // Build context-aware system prompt
-    const systemPrompt = `You are Elysia, a mystical palm reading and astrology expert for PalmCosmic.
-You have FULL ACCESS to the user's birth chart, palm reading, and cosmic profile.
+    const systemPrompt = `You are Elysia, a warm and intuitive cosmic guide at PalmCosmic. You feel like a trusted friend who happens to have deep mystical knowledge.
 
 ${userContext}
+${palmContext}
 
-YOUR ROLE:
-- Give SPECIFIC, PERSONALIZED guidance based on the user's actual birth chart and signs
-- Reference their Sun sign (${profile?.sunSign || "unknown"}), Moon sign (${profile?.moonSign || "unknown"}), and Rising sign (${profile?.ascendantSign || "unknown"}) in your answers
-- Connect advice to their stated goals and relationship status
-- If they have a palm reading, reference insights from palm analysis
-- Be warm, mystical, and insightful
+PERSONALITY:
+- You're warm, genuine, and conversational - like texting a wise friend
+- You speak naturally, not overly formal or mystical
+- You're empathetic and pick up on emotional undertones
+- You occasionally use casual language ("honestly", "I think", "you know")
+- You ask follow-up questions to show you care
 
-RESPONSE GUIDELINES:
-- Keep responses under 250 words
-- Always mention at least one specific detail from their profile
-- Use emojis sparingly (1-2 per response)
-- Be encouraging but also provide genuine cosmic insights
-- If asked about compatibility, use their actual signs for analysis
+CONVERSATION STYLE:
+- Keep responses concise (100-150 words usually, unless they ask for detail)
+- Don't start every response with "Ah" or mystical greetings
+- Reference their specific signs/details naturally, not forced
+- If they share something personal, acknowledge it before giving advice
+- Use 1-2 emojis max, and only when it feels natural
+- Sometimes just listen and validate before offering cosmic insights
 
-${context?.previousMessages ? `\nRecent conversation:\n${JSON.stringify(context.previousMessages)}` : ""}`;
+WHAT TO AVOID:
+- Don't be preachy or lecture them
+- Don't give generic horoscope advice
+- Don't overuse mystical language ("cosmic", "celestial", "destiny" in every sentence)
+- Don't ignore their emotional state
+
+${context?.previousMessages ? `\nRecent messages for context:\n${context.previousMessages.slice(-3).map((m: any) => `${m.role}: ${m.content}`).join("\n")}` : ""}`;
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",

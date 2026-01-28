@@ -35,6 +35,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get the base URL - use request origin as fallback
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "https://palmcosmic-web-app.vercel.app";
+
     const sessionParams: any = {
       mode: "subscription",
       payment_method_types: ["card"],
@@ -45,8 +48,8 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/step-18?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/step-17`,
+      success_url: `${baseUrl}/onboarding/step-18?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/onboarding/step-17`,
       metadata: {
         userId: userId || "",
         plan,

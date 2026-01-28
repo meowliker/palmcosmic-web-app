@@ -59,7 +59,12 @@ export default function EditProfilePage() {
 
   const formatBirthDate = () => {
     if (!birthMonth || !birthDay || !birthYear) return "Not set";
-    return `${months[Number(birthMonth) - 1]} ${birthDay}, ${birthYear}`;
+    // birthMonth could be a month name or number
+    const monthIndex = isNaN(Number(birthMonth)) 
+      ? months.findIndex(m => m.toLowerCase() === birthMonth.toLowerCase())
+      : Number(birthMonth) - 1;
+    const monthName = monthIndex >= 0 && monthIndex < 12 ? months[monthIndex] : birthMonth;
+    return `${monthName} ${birthDay}, ${birthYear}`;
   };
 
   const formatBirthTime = () => {

@@ -85,12 +85,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get the base URL - use request origin as fallback
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "https://palmcosmic-web-app.vercel.app";
+
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode: "payment", // One-time payment, not subscription
       payment_method_types: ["card"],
       line_items: lineItems,
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/step-18?cancelled=true`,
+      success_url: `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}`,
+      cancel_url: `${baseUrl}/onboarding/step-18?cancelled=true`,
       metadata: {
         userId: userId || "",
         type: "upsell",

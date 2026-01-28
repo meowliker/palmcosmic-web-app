@@ -66,6 +66,7 @@ export default function ChatPage() {
   const [palmImage, setPalmImage] = useState<string | null>(null);
   const [purchaseError, setPurchaseError] = useState("");
   const [purchasingPackage, setPurchasingPackage] = useState<number | null>(null);
+  const [palmReading, setPalmReading] = useState<any>(null);
 
   // Get coins from user store
   const { coins, deductCoins } = useUserStore();
@@ -129,7 +130,7 @@ export default function ChatPage() {
     ascendantSign,
   } = useOnboardingStore();
 
-  // Initialize welcome message and load palm image on client side only
+  // Initialize welcome message and load palm reading from Firebase
   useEffect(() => {
     setIsClient(true);
     
@@ -139,14 +140,34 @@ export default function ChatPage() {
       setPalmImage(savedPalmImage);
     }
 
-    // Personalized welcome message
-    const userName = gender === "male" ? "dear soul" : gender === "female" ? "dear soul" : "dear soul";
-    const signInfo = ascendantSign?.name ? ` As a ${ascendantSign.name} rising, ` : " ";
+    // Load palm reading from Firebase
+    const loadPalmReading = async () => {
+      try {
+        const { doc, getDoc } = await import("firebase/firestore");
+        const { db } = await import("@/lib/firebase");
+        const { generateUserId } = await import("@/lib/user-profile");
+        const userId = generateUserId();
+        const docSnap = await getDoc(doc(db, "palm_readings", userId));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setPalmReading(data.reading);
+          if (data.palmImageUrl) setPalmImage(data.palmImageUrl);
+        }
+      } catch (err) {
+        console.error("Failed to load palm reading:", err);
+      }
+    };
+    loadPalmReading();
+
+    // Natural welcome message
+    const greeting = ascendantSign?.name 
+      ? `Hey there! I'm Elysia. I can see you're a ${ascendantSign.name} rising - that's fascinating! I've got your birth chart and palm reading ready. What's on your mind today?`
+      : `Hey! I'm Elysia, your cosmic guide. I've got access to your birth chart and palm reading. What would you like to explore today?`;
     
     setMessages([
       {
         role: "assistant",
-        content: `Welcome, ${userName}! I'm Elysia, your personal cosmic guide.${signInfo}I'm here to help you unlock the mysteries hidden in your palm and navigate your life's journey with clarity and wisdom. I have access to your birth chart, palm reading, and cosmic profile. Feel free to ask me anything about love, career, health, or your destiny!`,
+        content: greeting,
         timestamp: new Date(),
       },
     ]);
@@ -202,6 +223,7 @@ export default function ChatPage() {
           message: textToSend,
           userProfile,
           palmImageBase64: palmImage,
+          palmReading: palmReading,
           context: {
             previousMessages: messages.slice(-5),
           },
