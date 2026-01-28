@@ -49,6 +49,13 @@ export default function LoginPage() {
       localStorage.setItem("palmcosmic_email", user.email || "");
       localStorage.setItem("palmcosmic_password", password); // For delete account verification
       
+      // Set access cookie via API
+      try {
+        await fetch("/api/session", { method: "POST" });
+      } catch (err) {
+        console.error("Failed to set session:", err);
+      }
+      
       // Redirect to dashboard
       router.push("/reports");
     } catch (err: any) {
@@ -128,10 +135,18 @@ export default function LoginPage() {
 
       if (emailForSignIn) {
         signInWithEmailLink(auth, emailForSignIn, window.location.href)
-          .then((result) => {
+          .then(async (result) => {
             localStorage.removeItem("palmcosmic_email_for_signin");
             localStorage.setItem("palmcosmic_user_id", result.user.uid);
             localStorage.setItem("palmcosmic_email", result.user.email || "");
+            
+            // Set access cookie via API
+            try {
+              await fetch("/api/session", { method: "POST" });
+            } catch (err) {
+              console.error("Failed to set session:", err);
+            }
+            
             router.push("/reports");
           })
           .catch((error) => {

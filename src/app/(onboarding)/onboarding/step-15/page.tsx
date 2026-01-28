@@ -139,7 +139,7 @@ export default function Step15Page() {
             placeholder="Enter your email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full h-12 px-4 bg-primary/10 border border-primary/30 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 mb-4"
+            className="w-full h-12 px-4 bg-white/10 border border-primary/30 rounded-lg text-black placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 mb-4"
           />
 
           <div className="flex items-start gap-2 text-xs text-muted-foreground mb-6">

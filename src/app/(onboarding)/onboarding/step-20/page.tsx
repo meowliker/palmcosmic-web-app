@@ -24,7 +24,13 @@ const features = [
 export default function Step20Page() {
   const router = useRouter();
 
-  const handleAccessApp = () => {
+  const handleAccessApp = async () => {
+    // Set access cookie via API
+    try {
+      await fetch("/api/session", { method: "POST" });
+    } catch (err) {
+      console.error("Failed to set session:", err);
+    }
     router.push("/dashboard");
   };
 

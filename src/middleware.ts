@@ -1,7 +1,36 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  // Firebase handles auth on client-side, no server middleware needed
+  const { pathname } = request.nextUrl;
+  
+  // Protected routes that require onboarding completion
+  const protectedRoutes = [
+    "/dashboard",
+    "/reports",
+    "/chat",
+    "/palm-reading",
+    "/horoscope",
+    "/birth-chart",
+    "/compatibility",
+    "/prediction-2026",
+    "/profile",
+    "/settings",
+    "/manage-subscription",
+  ];
+  
+  // Check if current path is protected
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
+  
+  if (isProtectedRoute) {
+    // Check for access cookie
+    const hasAccess = request.cookies.get("pc_access");
+    
+    if (!hasAccess) {
+      // Redirect to welcome/onboarding
+      return NextResponse.redirect(new URL("/welcome", request.url));
+    }
+  }
+  
   return NextResponse.next();
 }
 
