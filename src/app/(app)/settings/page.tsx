@@ -112,7 +112,7 @@ export default function SettingsPage() {
                 <ChevronRight className="w-5 h-5 text-white/30" />
               </button>
               <button
-                onClick={() => window.open("mailto:support@palmcosmic.com", "_blank")}
+                onClick={() => window.open("/contact-us", "_blank")}
                 className="w-full p-4 flex items-center gap-3 hover:bg-white/5 transition-colors"
               >
                 <Mail className="w-5 h-5 text-white/50" />

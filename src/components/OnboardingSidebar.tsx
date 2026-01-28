@@ -10,7 +10,7 @@ interface OnboardingSidebarProps {
 
 export function OnboardingSidebar({ isOpen, onClose }: OnboardingSidebarProps) {
   const menuItems = [
-    { label: "Contact us", href: "mailto:support@palmcosmic.com" },
+    { label: "Contact us", href: "/contact-us" },
     { label: "Privacy Policy", href: "/privacy-policy" },
     { label: "Terms of Service", href: "/terms-of-service" },
   ];
