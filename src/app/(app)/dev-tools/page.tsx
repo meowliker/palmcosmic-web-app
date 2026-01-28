@@ -154,8 +154,8 @@ export default function DevToolsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  purchaseSubscription("1-week");
-                  showMessage("1-week plan activated (15 coins)");
+                  purchaseSubscription("weekly");
+                  showMessage("Weekly plan activated (15 coins)");
                 }}
                 className="text-xs"
               >
@@ -165,8 +165,8 @@ export default function DevToolsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  purchaseSubscription("2-week");
-                  showMessage("2-week plan activated (15 coins)");
+                  purchaseSubscription("monthly");
+                  showMessage("Monthly plan activated (15 coins)");
                 }}
                 className="text-xs"
               >
@@ -176,8 +176,8 @@ export default function DevToolsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  purchaseSubscription("4-week");
-                  showMessage("4-week plan activated (30 coins)");
+                  purchaseSubscription("yearly");
+                  showMessage("Yearly plan activated (30 coins)");
                 }}
                 className="text-xs"
               >

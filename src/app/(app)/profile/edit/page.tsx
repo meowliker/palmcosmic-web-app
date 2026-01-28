@@ -404,8 +404,8 @@ export default function EditProfilePage() {
           )}
           {editingField === "birthTime" && (
             <TimePickerModal
-              hour={birthHour}
-              minute={birthMinute}
+              hour={Number(birthHour) || 12}
+              minute={Number(birthMinute) || 0}
               period={birthPeriod}
               onSave={(h, m, p) => handleSaveField("birthTime", { hour: h, minute: m, period: p })}
               onClose={() => setEditingField(null)}
