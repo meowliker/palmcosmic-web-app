@@ -8,11 +8,22 @@ import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useUserStore } from "@/lib/user-store";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { generateUserId } from "@/lib/user-profile";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  timestamp: Date;
+  timestamp: Date | string;
+  palmImage?: string;
+  traits?: Array<{ name: string; value: number; color: string }>;
+}
+
+interface StoredMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
   palmImage?: string;
   traits?: Array<{ name: string; value: number; color: string }>;
 }
@@ -67,6 +78,7 @@ export default function ChatPage() {
   const [purchaseError, setPurchaseError] = useState("");
   const [purchasingPackage, setPurchasingPackage] = useState<number | null>(null);
   const [palmReading, setPalmReading] = useState<any>(null);
+  const [chatLoaded, setChatLoaded] = useState(false);
 
   // Get coins from user store
   const { coins, deductCoins } = useUserStore();
@@ -130,7 +142,7 @@ export default function ChatPage() {
     ascendantSign,
   } = useOnboardingStore();
 
-  // Initialize welcome message and load palm reading from Firebase
+  // Initialize welcome message and load palm reading + chat history from Firebase
   useEffect(() => {
     setIsClient(true);
     
@@ -140,38 +152,83 @@ export default function ChatPage() {
       setPalmImage(savedPalmImage);
     }
 
-    // Load palm reading from Firebase
-    const loadPalmReading = async () => {
+    const loadData = async () => {
+      const userId = generateUserId();
+
+      // Load palm reading from Firebase
       try {
-        const { doc, getDoc } = await import("firebase/firestore");
-        const { db } = await import("@/lib/firebase");
-        const { generateUserId } = await import("@/lib/user-profile");
-        const userId = generateUserId();
-        const docSnap = await getDoc(doc(db, "palm_readings", userId));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        const palmDocSnap = await getDoc(doc(db, "palm_readings", userId));
+        if (palmDocSnap.exists()) {
+          const data = palmDocSnap.data();
           setPalmReading(data.reading);
           if (data.palmImageUrl) setPalmImage(data.palmImageUrl);
         }
       } catch (err) {
         console.error("Failed to load palm reading:", err);
       }
-    };
-    loadPalmReading();
 
-    // Natural welcome message
-    const greeting = ascendantSign?.name 
-      ? `Hey there! I'm Elysia. I can see you're a ${ascendantSign.name} rising - that's fascinating! I've got your birth chart and palm reading ready. What's on your mind today?`
-      : `Hey! I'm Elysia, your cosmic guide. I've got access to your birth chart and palm reading. What would you like to explore today?`;
-    
-    setMessages([
-      {
-        role: "assistant",
-        content: greeting,
-        timestamp: new Date(),
-      },
-    ]);
+      // Load chat history from Firebase
+      try {
+        const chatDocSnap = await getDoc(doc(db, "chat_messages", userId));
+        if (chatDocSnap.exists()) {
+          const data = chatDocSnap.data();
+          if (data.messages && data.messages.length > 0) {
+            const loadedMessages: Message[] = data.messages.map((m: StoredMessage) => ({
+              ...m,
+              timestamp: new Date(m.timestamp),
+            }));
+            setMessages(loadedMessages);
+            setChatLoaded(true);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load chat history:", err);
+      }
+
+      // No saved chat - show welcome message
+      const greeting = ascendantSign?.name 
+        ? `Hey there! I'm Elysia. I can see you're a ${ascendantSign.name} rising - that's fascinating! I've got your birth chart and palm reading ready. What's on your mind today?`
+        : `Hey! I'm Elysia, your cosmic guide. I've got access to your birth chart and palm reading. What would you like to explore today?`;
+      
+      setMessages([
+        {
+          role: "assistant",
+          content: greeting,
+          timestamp: new Date(),
+        },
+      ]);
+      setChatLoaded(true);
+    };
+
+    loadData();
   }, [gender, ascendantSign]);
+
+  // Save chat messages to Firebase whenever they change
+  useEffect(() => {
+    if (!chatLoaded || messages.length === 0) return;
+
+    const saveChat = async () => {
+      try {
+        const userId = generateUserId();
+        const storedMessages: StoredMessage[] = messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : m.timestamp,
+          palmImage: m.palmImage,
+          traits: m.traits,
+        }));
+        await setDoc(doc(db, "chat_messages", userId), {
+          messages: storedMessages,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error("Failed to save chat:", err);
+      }
+    };
+
+    saveChat();
+  }, [messages, chatLoaded]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -400,7 +457,7 @@ export default function ChatPage() {
 
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
               <p className="text-[10px] opacity-50 mt-2">
-                {message.timestamp.toLocaleTimeString([], {
+                {(message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp)).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
