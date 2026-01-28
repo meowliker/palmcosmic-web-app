@@ -1,20 +1,20 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { fadeUp } from "@/lib/motion";
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
+  const router = useRouter();
+  
+  // Redirect to reports page which is the main dashboard
+  if (typeof window !== "undefined") {
+    router.replace("/reports");
+  }
+  
   return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      variants={fadeUp}
-      className="p-6"
-    >
-      <h1 className="font-cormorant text-3xl font-bold mb-4">Dashboard</h1>
-      <p className="text-muted-foreground">
-        Your cosmic insights and palm readings will appear here.
-      </p>
-    </motion.div>
+    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="w-full max-w-md h-screen bg-[#0A0E1A] flex items-center justify-center">
+        <p className="text-white/60">Redirecting...</p>
+      </div>
+    </div>
   );
 }

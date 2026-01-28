@@ -5,31 +5,34 @@ import { useEffect, useState } from "react";
 
 interface ForecastSphereProps {
   targetPercentage?: number;
+  startPercentage?: number;
   duration?: number;
   size?: number;
 }
 
 export function ForecastSphere({ 
-  targetPercentage = 34, 
+  targetPercentage = 34,
+  startPercentage = 0,
   duration = 3,
   size = 180 
 }: ForecastSphereProps) {
-  const [percentage, setPercentage] = useState(0);
+  const [percentage, setPercentage] = useState(startPercentage);
 
   useEffect(() => {
     const startTime = Date.now();
+    const range = targetPercentage - startPercentage;
     const animate = () => {
       const elapsed = (Date.now() - startTime) / 1000;
       const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setPercentage(Math.round(eased * targetPercentage));
+      setPercentage(Math.round(startPercentage + eased * range));
       
       if (progress < 1) {
         requestAnimationFrame(animate);
       }
     };
     requestAnimationFrame(animate);
-  }, [targetPercentage, duration]);
+  }, [targetPercentage, startPercentage, duration]);
 
   const waterHeight = (percentage / 100) * size;
 
@@ -48,7 +51,7 @@ export function ForecastSphere({
         
         <motion.div
           className="absolute bottom-0 left-0 right-0"
-          initial={{ height: 0 }}
+          initial={{ height: (startPercentage / 100) * size }}
           animate={{ height: waterHeight }}
           transition={{ duration: duration, ease: "easeOut" }}
         >

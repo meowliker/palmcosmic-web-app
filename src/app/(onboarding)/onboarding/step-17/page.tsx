@@ -6,44 +6,137 @@ import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Check, Shield } from "lucide-react";
-import Image from "next/image";
+import { useUserStore, SubscriptionPlan } from "@/lib/user-store";
 
 const pricingPlans = [
   {
-    id: "1-week",
-    name: "1-Week Trial",
-    price: "$1",
-    originalPrice: "$4.99",
-    period: "1-WEEK trial",
-    description: "then 2-Week Plan $19.99",
+    id: "weekly",
+    name: "Weekly",
+    price: "$4.99",
+    period: "/week",
+    trialDays: 3,
+    trialText: "3-day free trial",
+    description: "Billed weekly after trial",
   },
   {
-    id: "2-week",
-    name: "2-Week Trial",
-    price: "$5.49",
-    originalPrice: "$18.99",
-    period: "2-WEEK trial",
-    description: "then 2-Week Plan $19.99",
+    id: "monthly",
+    name: "Monthly",
+    price: "$9.99",
+    period: "/month",
+    trialDays: 7,
+    trialText: "1-week free trial",
+    description: "Billed monthly after trial",
     popular: true,
   },
   {
-    id: "4-week",
-    name: "4-Week Trial",
-    price: "$9.99",
-    originalPrice: "$19.99",
-    period: "4-WEEK trial",
-    description: "then 1-Month Plan $29.99",
+    id: "yearly",
+    name: "Yearly",
+    price: "$39.99",
+    period: "/year",
+    trialDays: 14,
+    trialText: "2-week free trial",
+    description: "Best value - Save 67%",
+    bestValue: true,
   },
 ];
 
 export default function Step17Page() {
   const router = useRouter();
-  const [selectedPlan, setSelectedPlan] = useState("2-week");
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("monthly");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showPromoInput, setShowPromoInput] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoError, setPromoError] = useState("");
+  const [promoSuccess, setPromoSuccess] = useState(false);
+  const [promoData, setPromoData] = useState<any>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  const { purchaseSubscription, unlockAllFeatures, setCoins } = useUserStore();
 
-  const handleStartTrial = () => {
-    // In a real app, this would initiate payment
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) {
+      setPromoError("Please enter a promo code");
+      return;
+    }
+
+    setIsValidating(true);
+    setPromoError("");
+
+    try {
+      const response = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoCode }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setPromoSuccess(true);
+        setPromoData(result.data);
+        setPromoError("");
+      } else {
+        setPromoError(result.error || "Invalid promo code");
+        setPromoSuccess(false);
+      }
+    } catch (error) {
+      setPromoError("Failed to validate promo code");
+      setPromoSuccess(false);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handlePromoActivate = () => {
+    // Give access based on promo data from Firebase
+    const plan = (promoData?.plan || "yearly") as SubscriptionPlan;
+    const coins = promoData?.coins || 100;
+    
+    purchaseSubscription(plan);
+    if (promoData?.unlockAll !== false) {
+      unlockAllFeatures();
+    }
+    setCoins(coins);
     router.push("/onboarding/step-18");
+  };
+
+  const handleStartTrial = async () => {
+    setPaymentError("");
+    setIsProcessing(true);
+
+    try {
+      // Create Stripe checkout session
+      const response = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: selectedPlan,
+          userId: "", // Will be set after registration
+          email: localStorage.getItem("palmcosmic_email") || "",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
+      } else if (data.error) {
+        // Show error message on the paywall
+        setPaymentError(data.error);
+        setIsProcessing(false);
+      } else {
+        // No URL returned - show generic error
+        setPaymentError("Unable to start checkout. Please try again.");
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error("Checkout error:", error);
+      setPaymentError("Something went wrong. Please try again.");
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -54,19 +147,13 @@ export default function Step17Page() {
       className="flex-1 flex flex-col min-h-screen bg-background"
     >
       <div className="flex-1 flex flex-col items-center px-6 py-6 overflow-y-auto">
-        {/* Get My Prediction button at top */}
+        {/* Complete Purchase Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-sm mb-6"
+          className="w-full max-w-sm mb-4 text-center"
         >
-          <Button
-            variant="outline"
-            className="w-full h-12 text-base font-semibold border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-            size="lg"
-          >
-            Get My Prediction
-          </Button>
+          <h2 className="text-muted-foreground text-sm uppercase tracking-wider">Complete Your Purchase</h2>
         </motion.div>
 
         {/* Unlock predictions heading */}
@@ -87,7 +174,7 @@ export default function Step17Page() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 + index * 0.1 }}
-              onClick={() => setSelectedPlan(plan.id)}
+              onClick={() => setSelectedPlan(plan.id as SubscriptionPlan)}
               className={`w-full p-4 rounded-xl border-2 transition-all relative ${
                 selectedPlan === plan.id
                   ? "border-primary bg-primary/10"
@@ -103,20 +190,22 @@ export default function Step17Page() {
               <div className="flex items-center justify-between">
                 <div className="text-left">
                   <h3 className="font-semibold text-base">{plan.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-primary font-bold">{plan.price}</span>
-                    <span className="text-muted-foreground line-through text-sm">
-                      {plan.originalPrice}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-primary mt-1">
+                    {plan.trialText}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {plan.description}
                   </p>
+                  {(plan as any).bestValue && (
+                    <span className="inline-block mt-1 px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
+                      Best Value
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-right">
                   <span className="text-2xl font-bold">{plan.price}</span>
-                  <p className="text-xs text-muted-foreground uppercase">
+                  <p className="text-xs text-muted-foreground">
                     {plan.period}
                   </p>
                 </div>
@@ -132,14 +221,62 @@ export default function Step17Page() {
           transition={{ delay: 0.5 }}
           className="w-full max-w-sm mb-4"
         >
+{/* Payment Error Message */}
+          {paymentError && (
+            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <p className="text-red-400 text-sm text-center">{paymentError}</p>
+            </div>
+          )}
+
           <Button
             onClick={handleStartTrial}
-            disabled={!agreedToTerms}
+            disabled={!agreedToTerms || isProcessing}
             className="w-full h-14 text-lg font-semibold"
             size="lg"
           >
-            Start Trial and Continue
+            {isProcessing ? "Processing..." : "Start Trial and Continue"}
           </Button>
+          
+          <button 
+            onClick={() => setShowPromoInput(!showPromoInput)}
+            className="mt-3 text-primary text-sm underline hover:text-primary/80 transition-colors"
+          >
+            Have a promo code?
+          </button>
+
+          {/* Promo Code Input */}
+          {showPromoInput && (
+            <div className="mt-4 space-y-3">
+              {promoSuccess ? (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+                  <p className="text-green-400 font-semibold mb-2">🎉 Promo code applied!</p>
+                  <p className="text-green-300 text-sm mb-3">You get full access for FREE</p>
+                  <Button
+                    onClick={handlePromoActivate}
+                    className="w-full bg-green-500 hover:bg-green-600"
+                  >
+                    Activate Free Access
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder="Enter promo code"
+                    className="flex-1 bg-card border border-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-primary"
+                  />
+                  <Button onClick={handleApplyPromo} variant="outline" disabled={isValidating}>
+                    {isValidating ? "..." : "Apply"}
+                  </Button>
+                </div>
+              )}
+              {promoError && (
+                <p className="text-red-400 text-sm">{promoError}</p>
+              )}
+            </div>
+          )}
         </motion.div>
 
         {/* Terms checkbox */}
@@ -165,7 +302,7 @@ export default function Step17Page() {
               <a href="#" className="text-primary underline">Terms of Use</a>,{" "}
               <a href="#" className="text-primary underline">Billing Terms</a> and{" "}
               <a href="#" className="text-primary underline">Money-back Policy</a>.
-              Start your 14-day trial for $5.49. After the trial, you&apos;ll be charged $19.99 every 2 weeks starting from February 7 until canceled.
+              Your free trial will begin immediately. After the trial period ends, you&apos;ll be automatically charged the subscription price until canceled.
               By completing your purchase, you consent to us securely storing your payment details for future charges. No refunds for partial periods. You can cancel subscription anytime via account settings or by contacting support at support@palmcosmic.app.
             </span>
           </label>

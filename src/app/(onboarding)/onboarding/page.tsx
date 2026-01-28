@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 import { useRouter } from "next/navigation";
@@ -7,6 +8,7 @@ import { useOnboardingStore, Gender } from "@/lib/onboarding-store";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
+import { OnboardingSidebar } from "@/components/OnboardingSidebar";
 
 const genderOptions: { value: Gender; label: string; icon: string }[] = [
   { value: "female", label: "Female", icon: "♀" },
@@ -17,6 +19,7 @@ const genderOptions: { value: Gender; label: string; icon: string }[] = [
 export default function OnboardingPage() {
   const router = useRouter();
   const { gender, setGender } = useOnboardingStore();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleGenderSelect = (selectedGender: Gender) => {
     setGender(selectedGender);
@@ -24,6 +27,7 @@ export default function OnboardingPage() {
   };
 
   return (
+    <>
     <motion.div
       variants={staggerContainer}
       initial="hidden"
@@ -31,7 +35,10 @@ export default function OnboardingPage() {
       className="flex-1 flex flex-col min-h-screen"
     >
       <header className="flex items-center justify-end px-4 py-4">
-        <button className="p-2 -mr-2 text-foreground/70 hover:text-foreground transition-colors">
+        <button 
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 -mr-2 text-foreground/70 hover:text-foreground transition-colors"
+        >
           <Menu className="w-5 h-5" />
         </button>
       </header>
@@ -99,5 +106,7 @@ export default function OnboardingPage() {
         </motion.div>
       </div>
     </motion.div>
+    <OnboardingSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    </>
   );
 }

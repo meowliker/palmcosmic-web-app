@@ -1,12 +1,8 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-
-interface PalmLine {
-  color: string;
-  points: { x: number; y: number }[];
-}
+import { detectPalmFeatures as detectPalmFeaturesFromImage } from "@/lib/palm-detection";
 
 interface PalmAnalysisProps {
   imageData: string;
@@ -14,101 +10,118 @@ interface PalmAnalysisProps {
 }
 
 export function PalmAnalysis({ imageData, onComplete }: PalmAnalysisProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("Initializing analysis...");
   const [fingertips, setFingertips] = useState<{ x: number; y: number }[]>([]);
-  const [palmLines, setPalmLines] = useState<PalmLine[]>([]);
-  const [scanLineY, setScanLineY] = useState(0);
-  const [showLines, setShowLines] = useState(false);
+  const fingertipsSetRef = useRef(false);
+  const detectionStartedRef = useRef(false);
 
-  const detectPalmFeatures = useCallback(() => {
-    if (!imageData) return;
+  // Run detection once on mount
+  useEffect(() => {
+    if (!imageData || detectionStartedRef.current) return;
+    detectionStartedRef.current = true;
 
-    // Simulate progressive analysis with scanning animation
-    const scanDuration = 5000;
+    const mapPointToCover = (
+      point: { x: number; y: number },
+      imageSize: { width: number; height: number },
+      containerSize: { width: number; height: number }
+    ) => {
+      const scale = Math.max(
+        containerSize.width / imageSize.width,
+        containerSize.height / imageSize.height
+      );
+      const scaledWidth = imageSize.width * scale;
+      const scaledHeight = imageSize.height * scale;
+      const offsetX = (scaledWidth - containerSize.width) / 2;
+      const offsetY = (scaledHeight - containerSize.height) / 2;
+
+      const xPx = point.x * scaledWidth - offsetX;
+      const yPx = point.y * scaledHeight - offsetY;
+
+      const xNorm = (xPx / containerSize.width) * 100;
+      const yNorm = (yPx / containerSize.height) * 133;
+
+      return {
+        x: Math.max(0, Math.min(100, xNorm)),
+        y: Math.max(0, Math.min(133, yNorm)),
+      };
+    };
+
+    // Start detection immediately
+    (async () => {
+      try {
+        console.log("[PalmAnalysis] Starting detection...");
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.src = imageData;
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => {
+            console.log("[PalmAnalysis] Image loaded:", img.width, "x", img.height);
+            resolve();
+          };
+          img.onerror = () => reject(new Error("Failed to load palm image"));
+        });
+
+        console.log("[PalmAnalysis] Calling detectPalmFeatures...");
+        const detected = await detectPalmFeaturesFromImage(img);
+        console.log("[PalmAnalysis] Detection result:", detected);
+
+        const container = containerRef.current;
+        const containerSize = container
+          ? { width: container.clientWidth, height: container.clientHeight }
+          : null;
+
+        if (detected.fingertips.length > 0 && containerSize) {
+          const mappedTips = detected.fingertips.map((t) =>
+            mapPointToCover(
+              { x: t.x, y: t.y },
+              { width: img.width, height: img.height },
+              containerSize
+            )
+          );
+
+          console.log("[PalmAnalysis] Mapped fingertips:", mappedTips);
+
+          const showFingertips = () => {
+            if (!fingertipsSetRef.current) {
+              fingertipsSetRef.current = true;
+              setFingertips(mappedTips);
+            }
+          };
+
+          setTimeout(showFingertips, 3500);
+        }
+      } catch (err) {
+        console.error("[PalmAnalysis] Detection error:", err);
+      }
+    })();
+
+    // Progress animation - completely independent from detection
+    const totalDuration = 8000;
     const startTime = Date.now();
     
-    const animateScan = () => {
+    const updateProgress = () => {
       const elapsed = Date.now() - startTime;
-      const scanProgress = Math.min(elapsed / scanDuration, 1);
-      
-      // Update scan line position
-      setScanLineY(scanProgress * 100);
-      
-      // Update progress
-      const currentProgress = Math.min(Math.floor(scanProgress * 100), 100);
-      setProgress(currentProgress);
+      const progressPercent = Math.min(Math.floor((elapsed / totalDuration) * 100), 100);
+      setProgress(progressPercent);
 
       // Update status text based on progress
-      if (currentProgress < 20) {
+      if (progressPercent < 25) {
         setStatusText("Detecting hand position...");
-      } else if (currentProgress < 40) {
+      } else if (progressPercent < 50) {
+        setStatusText("Scanning palm features...");
+      } else if (progressPercent < 70) {
         setStatusText("Locating fingertips...");
-        // Add fingertips at 30%
-        if (currentProgress >= 30 && fingertips.length === 0) {
-          setFingertips([
-            { x: 25, y: 15 },  // Pinky
-            { x: 38, y: 8 },   // Ring
-            { x: 50, y: 5 },   // Middle
-            { x: 62, y: 10 },  // Index
-            { x: 80, y: 40 },  // Thumb
-          ]);
-        }
-      } else if (currentProgress < 60) {
-        setStatusText("Identifying lines, mounts and plains...");
-      } else if (currentProgress < 80) {
+      } else if (progressPercent < 85) {
         setStatusText("Analyzing palm lines...");
-        if (!showLines) {
-          setShowLines(true);
-          // Add palm lines
-          if (palmLines.length === 0) {
-            setPalmLines([
-              {
-                color: "#F27067",
-                points: [
-                  { x: 75, y: 38 },
-                  { x: 55, y: 35 },
-                  { x: 35, y: 42 },
-                  { x: 22, y: 52 },
-                ],
-              },
-              {
-                color: "#4ECDC4",
-                points: [
-                  { x: 38, y: 38 },
-                  { x: 32, y: 55 },
-                  { x: 30, y: 75 },
-                  { x: 35, y: 90 },
-                ],
-              },
-              {
-                color: "#F5C542",
-                points: [
-                  { x: 25, y: 55 },
-                  { x: 40, y: 50 },
-                  { x: 60, y: 48 },
-                  { x: 75, y: 55 },
-                ],
-              },
-              {
-                color: "#E88BE8",
-                points: [
-                  { x: 50, y: 90 },
-                  { x: 50, y: 70 },
-                  { x: 48, y: 55 },
-                  { x: 46, y: 42 },
-                ],
-              },
-            ]);
-          }
-        }
       } else {
         setStatusText("Generating your palm reading result...");
       }
 
-      if (scanProgress < 1) {
-        requestAnimationFrame(animateScan);
+      if (elapsed < totalDuration) {
+        requestAnimationFrame(updateProgress);
       } else {
         // Complete after a short delay
         setTimeout(() => {
@@ -117,39 +130,16 @@ export function PalmAnalysis({ imageData, onComplete }: PalmAnalysisProps) {
       }
     };
 
-    // Start animation
-    setTimeout(animateScan, 500);
-  }, [imageData, onComplete, fingertips.length, showLines, palmLines.length]);
-
-  useEffect(() => {
-    detectPalmFeatures();
-  }, [detectPalmFeatures]);
-
-  const generatePathD = (points: { x: number; y: number }[]) => {
-    if (points.length < 2) return "";
-    
-    let d = `M${points[0].x} ${points[0].y}`;
-    
-    if (points.length === 2) {
-      d += ` L${points[1].x} ${points[1].y}`;
-    } else {
-      // Create smooth curve through points
-      for (let i = 1; i < points.length - 1; i++) {
-        const xc = (points[i].x + points[i + 1].x) / 2;
-        const yc = (points[i].y + points[i + 1].y) / 2;
-        d += ` Q${points[i].x} ${points[i].y} ${xc} ${yc}`;
-      }
-      // Last point
-      const last = points[points.length - 1];
-      d += ` L${last.x} ${last.y}`;
-    }
-    
-    return d;
-  };
+    // Start progress animation
+    setTimeout(updateProgress, 500);
+  }, [imageData, onComplete]);
 
   return (
     <div className="flex flex-col items-center w-full">
-      <div className="relative w-full max-w-sm aspect-[3/4] bg-black/50 rounded-lg overflow-hidden">
+      <div
+        ref={containerRef}
+        className="relative w-full max-w-sm aspect-[3/4] bg-black/50 rounded-lg overflow-hidden"
+      >
         {/* Captured palm image */}
         <img
           src={imageData}
@@ -157,29 +147,24 @@ export function PalmAnalysis({ imageData, onComplete }: PalmAnalysisProps) {
           className="w-full h-full object-cover"
         />
 
-        {/* SVG overlay for lines and fingertips */}
+        {/* Scanning line - pure CSS animation, completely independent */}
+        {progress < 100 && (
+          <div 
+            className="absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-400 to-transparent animate-scan-line"
+            style={{
+              boxShadow: "0 0 10px 2px rgba(239, 107, 107, 0.6)",
+            }}
+          />
+        )}
+
+        {/* SVG overlay for fingertips */}
         <svg
           viewBox="0 0 100 133"
           className="absolute inset-0 w-full h-full pointer-events-none"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          preserveAspectRatio="xMidYMid slice"
+          preserveAspectRatio="none"
         >
-          {/* Scanning line */}
-          {progress < 100 && (
-            <motion.line
-              x1="0"
-              y1={scanLineY}
-              x2="100"
-              y2={scanLineY}
-              stroke="rgba(239, 107, 107, 0.8)"
-              strokeWidth="0.5"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 0.5, repeat: Infinity }}
-            />
-          )}
-
           {/* Fingertip dots */}
           {fingertips.map((tip, index) => (
             <motion.circle
@@ -188,29 +173,9 @@ export function PalmAnalysis({ imageData, onComplete }: PalmAnalysisProps) {
               cy={tip.y}
               r="1.5"
               fill="white"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: index * 0.1, duration: 0.3 }}
-            />
-          ))}
-
-          {/* Palm lines */}
-          {showLines && palmLines.map((line, index) => (
-            <motion.path
-              key={index}
-              d={generatePathD(line.points)}
-              stroke={line.color}
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ 
-                delay: index * 0.4, 
-                duration: 1.2, 
-                ease: "easeInOut" 
-              }}
+              initial={{ scale: 0.9, opacity: 0.55 }}
+              animate={{ scale: [0.9, 1.35, 0.9], opacity: [0.55, 1, 0.55] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut", delay: index * 0.08 }}
             />
           ))}
         </svg>

@@ -1,23 +1,42 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { Shield } from "lucide-react";
 
-const readingStats = [
-  { label: "Love", value: 89, color: "#EF6B6B" },
-  { label: "Health", value: 85, color: "#4ECDC4" },
-  { label: "Wisdom", value: 78, color: "#F5C542" },
-  { label: "Career", value: 65, color: "#8B5CF6" },
-];
+// Generate random stats with some variation for authenticity
+function generateRandomStats() {
+  const baseStats = [
+    { label: "Love", color: "#EF6B6B", min: 72, max: 95 },
+    { label: "Health", color: "#4ECDC4", min: 68, max: 92 },
+    { label: "Wisdom", color: "#F5C542", min: 65, max: 88 },
+    { label: "Career", color: "#8B5CF6", min: 58, max: 85 },
+  ];
+  return baseStats.map((stat) => ({
+    label: stat.label,
+    color: stat.color,
+    value: Math.floor(Math.random() * (stat.max - stat.min + 1)) + stat.min,
+  }));
+}
 
 export default function Step15Page() {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [palmImage, setPalmImage] = useState<string | null>(null);
+
+  // Generate random stats once on mount
+  const readingStats = useMemo(() => generateRandomStats(), []);
+
+  // Load captured palm image from localStorage
+  useEffect(() => {
+    const savedImage = localStorage.getItem("palmcosmic_palm_image");
+    if (savedImage) {
+      setPalmImage(savedImage);
+    }
+  }, []);
 
   const handleContinue = () => {
     // Store email if provided
@@ -56,15 +75,19 @@ export default function Step15Page() {
           </h2>
 
           <div className="flex gap-4 mb-4">
-            {/* Palm image */}
-            <div className="w-24 h-28 rounded-lg overflow-hidden flex-shrink-0">
-              <Image
-                src="/palm.png"
-                alt="Your palm"
-                width={96}
-                height={112}
-                className="w-full h-full object-cover"
-              />
+            {/* Palm image - use captured photo if available */}
+            <div className="w-24 h-28 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+              {palmImage ? (
+                <img
+                  src={palmImage}
+                  alt="Your palm"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
+                  Palm
+                </div>
+              )}
             </div>
 
             {/* Stats */}

@@ -3,8 +3,9 @@
 import { motion } from "framer-motion";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
+import { detectHandLandmarks } from "@/lib/palm-detection";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { useEffect, useState } from "react";
 
 const predictionLabels = [
   { text: "Children", emoji: "👶", top: "15%", left: "20%", rotation: -15 },
@@ -14,6 +15,75 @@ const predictionLabels = [
 
 export default function Step16Page() {
   const router = useRouter();
+  const [palmImage, setPalmImage] = useState<string | null>(null);
+  const [croppedPalmImage, setCroppedPalmImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const savedImage = localStorage.getItem("palmcosmic_palm_image");
+    if (savedImage) {
+      setPalmImage(savedImage);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!palmImage) return;
+
+    (async () => {
+      try {
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.src = palmImage;
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("Failed to load palm image"));
+        });
+
+        const results = await detectHandLandmarks(img);
+        const landmarks = results?.landmarks?.[0];
+        if (!landmarks || landmarks.length === 0) {
+          setCroppedPalmImage(palmImage);
+          return;
+        }
+
+        let minX = 1;
+        let minY = 1;
+        let maxX = 0;
+        let maxY = 0;
+        for (const p of landmarks) {
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x);
+          maxY = Math.max(maxY, p.y);
+        }
+
+        const pad = 0.12;
+        minX = Math.max(0, minX - pad);
+        minY = Math.max(0, minY - pad);
+        maxX = Math.min(1, maxX + pad);
+        maxY = Math.min(1, maxY + pad);
+
+        const sx = Math.floor(minX * img.width);
+        const sy = Math.floor(minY * img.height);
+        const sw = Math.max(1, Math.ceil((maxX - minX) * img.width));
+        const sh = Math.max(1, Math.ceil((maxY - minY) * img.height));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = sw;
+        canvas.height = sh;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setCroppedPalmImage(palmImage);
+          return;
+        }
+
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        const cropped = canvas.toDataURL("image/jpeg", 0.92);
+        setCroppedPalmImage(cropped);
+      } catch {
+        setCroppedPalmImage(palmImage);
+      }
+    })();
+  }, [palmImage]);
 
   const handleGetPrediction = () => {
     router.push("/onboarding/step-17");
@@ -27,14 +97,14 @@ export default function Step16Page() {
       className="flex-1 flex flex-col min-h-screen bg-background"
     >
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
-        {/* Header */}
+        {/* Header with Logo */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-2 mb-2"
+          className="flex flex-col items-center gap-1 mb-2"
         >
+          <img src="/logo.png" alt="PalmCosmic" className="w-20 h-20 object-contain" />
           <span className="text-sm text-muted-foreground">PalmCosmic</span>
-          <span className="text-lg">🔮</span>
         </motion.div>
 
         <motion.h1
@@ -67,13 +137,19 @@ export default function Step16Page() {
           
           {/* Dark circle container */}
           <div className="absolute inset-4 rounded-full bg-card/80 border border-border/50 overflow-hidden flex items-center justify-center">
-            <Image
-              src="/palm.png"
-              alt="Your palm reading"
-              width={200}
-              height={240}
-              className="object-contain opacity-80"
-            />
+            {croppedPalmImage ? (
+              <img
+                src={croppedPalmImage}
+                alt="Your palm"
+                className="w-full h-full object-cover opacity-80"
+              />
+            ) : (
+              <img
+                src="/palm.png"
+                alt="Your palm reading"
+                className="w-[200px] h-[240px] object-contain opacity-80"
+              />
+            )}
           </div>
 
           {/* Prediction labels */}

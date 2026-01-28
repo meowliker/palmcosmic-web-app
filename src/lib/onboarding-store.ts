@@ -8,6 +8,13 @@ export type RelationshipStatus = "in-relationship" | "just-broke-up" | "engaged"
 export type ColorPreference = "red" | "yellow" | "blue" | "orange" | "green" | "violet" | null;
 export type ElementPreference = "earth" | "water" | "fire" | "air" | null;
 
+interface SignData {
+  name: string;
+  symbol: string;
+  element: string;
+  description: string;
+}
+
 interface OnboardingState {
   gender: Gender;
   birthMonth: string;
@@ -22,6 +29,9 @@ interface OnboardingState {
   goals: string[];
   colorPreference: ColorPreference;
   elementPreference: ElementPreference;
+  sunSign: SignData | null;
+  moonSign: SignData | null;
+  ascendantSign: SignData | null;
   
   setGender: (gender: Gender) => void;
   setBirthDate: (month: string, day: string, year: string) => void;
@@ -32,6 +42,7 @@ interface OnboardingState {
   setGoals: (goals: string[]) => void;
   setColorPreference: (color: ColorPreference) => void;
   setElementPreference: (element: ElementPreference) => void;
+  setSigns: (sunSign: SignData, moonSign: SignData, ascendantSign: SignData) => void;
   reset: () => void;
 }
 
@@ -49,6 +60,9 @@ const initialState = {
   goals: [] as string[],
   colorPreference: null as ColorPreference,
   elementPreference: null as ElementPreference,
+  sunSign: null as SignData | null,
+  moonSign: null as SignData | null,
+  ascendantSign: null as SignData | null,
 };
 
 export const useOnboardingStore = create<OnboardingState>()(
@@ -75,6 +89,8 @@ export const useOnboardingStore = create<OnboardingState>()(
       setColorPreference: (colorPreference) => set({ colorPreference }),
       
       setElementPreference: (elementPreference) => set({ elementPreference }),
+      
+      setSigns: (sunSign, moonSign, ascendantSign) => set({ sunSign, moonSign, ascendantSign }),
       
       reset: () => set(initialState),
     }),

@@ -1,76 +1,147 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { fadeUp, staggerContainer, staggerItem } from "@/lib/motion";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Check, Crown, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Crown, Sparkles, X } from "lucide-react";
 
 export default function PaywallPage() {
+  const router = useRouter();
+
   return (
-    <motion.div
-      variants={staggerContainer}
-      initial="hidden"
-      animate="visible"
-      className="min-h-screen p-6 flex flex-col"
-    >
-      <motion.div variants={staggerItem} className="text-center mb-8">
-        <Crown className="w-12 h-12 text-accent mx-auto mb-4" />
-        <h1 className="font-cormorant text-3xl md:text-4xl font-bold mb-2">
-          Unlock Premium
-        </h1>
-        <p className="text-muted-foreground">
-          Get unlimited access to all cosmic features
-        </p>
-      </motion.div>
-
-      <motion.div variants={staggerItem} className="space-y-4 mb-8">
-        <Card className="p-6 border-primary bg-primary/5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="font-semibold text-lg">Yearly</p>
-              <p className="text-muted-foreground text-sm">Best value</p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold">$49.99</p>
-              <p className="text-muted-foreground text-sm">/year</p>
-            </div>
+    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="w-full max-w-md h-screen bg-[#0A0E1A] overflow-hidden shadow-2xl shadow-black/50 flex flex-col">
+        {/* Header */}
+        <div className="sticky top-0 z-40 bg-[#0A0E1A]/95 backdrop-blur-sm">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button
+              onClick={() => router.back()}
+              className="w-10 h-10 flex items-center justify-center"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+            <h1 className="text-white text-xl font-semibold">Premium</h1>
+            <div className="w-10" />
           </div>
-          <Button className="w-full" size="lg">
-            <Sparkles className="w-4 h-4 mr-2" />
-            Start Free Trial
-          </Button>
-        </Card>
+        </div>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="font-semibold text-lg">Monthly</p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold">$9.99</p>
-              <p className="text-muted-foreground text-sm">/month</p>
-            </div>
-          </div>
-          <Button variant="secondary" className="w-full" size="lg">
-            Subscribe Monthly
-          </Button>
-        </Card>
-      </motion.div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-4 py-6 space-y-6">
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center"
+            >
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center mx-auto mb-4">
+                <Crown className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-white text-2xl font-bold mb-2">
+                Unlock Premium
+              </h1>
+              <p className="text-white/60">
+                Get unlimited access to all cosmic features
+              </p>
+            </motion.div>
 
-      <motion.div variants={staggerItem} className="space-y-3">
-        {[
-          "Unlimited palm readings",
-          "AI-powered insights",
-          "Daily horoscope",
-          "Priority support",
-        ].map((feature) => (
-          <div key={feature} className="flex items-center gap-3">
-            <Check className="w-5 h-5 text-primary" />
-            <span>{feature}</span>
+            {/* Plans */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="space-y-4"
+            >
+              {/* Yearly Plan */}
+              <div className="bg-gradient-to-r from-[#2A2515] to-[#1A1F2E] rounded-2xl p-5 border-2 border-yellow-500/50 relative">
+                <div className="absolute -top-3 left-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-black text-xs font-bold px-3 py-1 rounded-full">
+                  BEST VALUE
+                </div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-white font-semibold text-lg">Yearly</p>
+                    <p className="text-primary text-sm">2-week free trial</p>
+                    <p className="text-white/50 text-sm">Save 67%</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white text-2xl font-bold">$39.99</p>
+                    <p className="text-white/50 text-sm">/year</p>
+                  </div>
+                </div>
+                <Button className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-black font-semibold rounded-full">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Start 2-Week Free Trial
+                </Button>
+              </div>
+
+              {/* Monthly Plan */}
+              <div className="bg-[#1A1F2E] rounded-2xl p-5 border-2 border-primary/50 relative">
+                <div className="absolute -top-3 left-4 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
+                  MOST POPULAR
+                </div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-white font-semibold text-lg">Monthly</p>
+                    <p className="text-primary text-sm">1-week free trial</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white text-2xl font-bold">$9.99</p>
+                    <p className="text-white/50 text-sm">/month</p>
+                  </div>
+                </div>
+                <Button className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-white font-semibold rounded-full">
+                  Start 1-Week Free Trial
+                </Button>
+              </div>
+
+              {/* Weekly Plan */}
+              <div className="bg-[#1A1F2E] rounded-2xl p-5 border border-white/10">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-white font-semibold text-lg">Weekly</p>
+                    <p className="text-primary text-sm">3-day free trial</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white text-2xl font-bold">$4.99</p>
+                    <p className="text-white/50 text-sm">/week</p>
+                  </div>
+                </div>
+                <Button variant="outline" className="w-full border-white/20 text-white hover:bg-white/10 rounded-full">
+                  Start 3-Day Free Trial
+                </Button>
+              </div>
+            </motion.div>
+
+            {/* Features */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-3"
+            >
+              {[
+                "Unlimited palm readings",
+                "AI-powered insights",
+                "Daily horoscope",
+                "Compatibility reports",
+                "Birth chart analysis",
+                "Priority support",
+              ].map((feature) => (
+                <div key={feature} className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded-full bg-rose-500/20 flex items-center justify-center">
+                    <Check className="w-4 h-4 text-rose-400" />
+                  </div>
+                  <span className="text-white">{feature}</span>
+                </div>
+              ))}
+            </motion.div>
+
+            {/* Footer */}
+            <p className="text-white/40 text-xs text-center">
+              Cancel anytime • Secure payment powered by Stripe
+            </p>
           </div>
-        ))}
-      </motion.div>
-    </motion.div>
+        </div>
+      </div>
+    </div>
   );
 }

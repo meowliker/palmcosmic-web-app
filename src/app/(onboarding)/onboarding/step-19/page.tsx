@@ -6,6 +6,8 @@ import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, ThumbsUp } from "lucide-react";
+import { useOnboardingStore } from "@/lib/onboarding-store";
+import { saveUserProfile } from "@/lib/user-profile";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -13,6 +15,25 @@ const progressSteps = [
   { label: "Create account", active: true },
   { label: "Access to the app", completed: false },
 ];
+
+const validatePassword = (password: string): { valid: boolean; message: string } => {
+  if (password.length < 8) {
+    return { valid: false, message: "Password must be at least 8 characters" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one uppercase letter" };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one lowercase letter" };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one number" };
+  }
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one special character" };
+  }
+  return { valid: true, message: "" };
+};
 
 export default function Step19Page() {
   const router = useRouter();
@@ -23,6 +44,9 @@ export default function Step19Page() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const onboardingData = useOnboardingStore();
 
   // Get stored email from previous step
   useEffect(() => {
@@ -37,17 +61,54 @@ export default function Step19Page() {
       return;
     }
 
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      setPasswordError(passwordValidation.message);
+      return;
+    }
+    setPasswordError(null);
+
     setIsLoading(true);
     
-    // Simulate registration
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      // Get palm image from localStorage
+      const palmImage = localStorage.getItem("palmcosmic_palm_image");
+      
+      // Save user profile to Firebase with all onboarding data
+      await saveUserProfile({
+        email,
+        gender: onboardingData.gender,
+        birthMonth: onboardingData.birthMonth,
+        birthDay: onboardingData.birthDay,
+        birthYear: onboardingData.birthYear,
+        birthHour: onboardingData.birthHour,
+        birthMinute: onboardingData.birthMinute,
+        birthPeriod: onboardingData.birthPeriod,
+        birthPlace: onboardingData.birthPlace,
+        knowsBirthTime: onboardingData.knowsBirthTime,
+        relationshipStatus: onboardingData.relationshipStatus,
+        goals: onboardingData.goals,
+        colorPreference: onboardingData.colorPreference,
+        elementPreference: onboardingData.elementPreference,
+        // Include zodiac signs
+        sunSign: onboardingData.sunSign,
+        moonSign: onboardingData.moonSign,
+        ascendantSign: onboardingData.ascendantSign,
+        // Include palm image
+        palmImage: palmImage || null,
+        // Timestamps
+        createdAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("Failed to save user profile:", err);
+    }
     
     setIsLoading(false);
     setShowSuccess(true);
   };
 
   const handleContinue = () => {
-    router.push("/dashboard");
+    router.push("/onboarding/step-20");
   };
 
   return (
@@ -178,6 +239,26 @@ export default function Step19Page() {
               {showConfirmPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
             </button>
           </motion.div>
+
+          {/* Password requirements hint */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-xs text-muted-foreground"
+          >
+            Password must be 8+ characters with uppercase, lowercase, number, and special character.
+          </motion.p>
+
+          {passwordError && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-xs text-red-400"
+            >
+              {passwordError}
+            </motion.p>
+          )}
         </div>
       </div>
 
@@ -262,7 +343,7 @@ export default function Step19Page() {
                   transition={{ delay: 0.4 }}
                   className="text-muted-foreground text-center mb-8 max-w-xs"
                 >
-                  Your account has been created successfully. Use your chosen email and password to log in to the app and explore all it has to offer
+                  You have successfully registered for PalmCosmic. You can now access the app.
                 </motion.p>
 
                 <motion.div
@@ -276,7 +357,7 @@ export default function Step19Page() {
                     className="w-full h-14 text-lg font-semibold"
                     size="lg"
                   >
-                    Continue
+                    Get My Prediction
                   </Button>
                 </motion.div>
               </div>

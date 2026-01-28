@@ -6,8 +6,14 @@ import { fadeUp, staggerContainer, staggerItem } from "@/lib/motion";
 import { OnboardingHeader, ProgressBar } from "@/components/onboarding/OnboardingHeader";
 import { Button } from "@/components/ui/button";
 import { useOnboardingStore } from "@/lib/onboarding-store";
-import { getSunSign, getMoonSign, getAscendant } from "@/lib/zodiac";
 import { useRouter } from "next/navigation";
+
+interface SignData {
+  name: string;
+  symbol: string;
+  element: string;
+  description: string;
+}
 
 const goalLabels: Record<string, string> = {
   "family-harmony": "Family harmony",
@@ -33,6 +39,11 @@ const relationshipLabels: Record<string, string> = {
 export default function Step11Page() {
   const router = useRouter();
   const [phase, setPhase] = useState(0);
+  const [sunSign, setSunSign] = useState<SignData>({ name: "...", symbol: "✦", element: "", description: "" });
+  const [moonSign, setMoonSign] = useState<SignData>({ name: "...", symbol: "✦", element: "", description: "" });
+  const [ascendant, setAscendant] = useState<SignData>({ name: "...", symbol: "✦", element: "", description: "" });
+  const [modality, setModality] = useState("Cardinal");
+  const [polarity, setPolarity] = useState("Feminine");
   
   const {
     gender,
@@ -41,21 +52,12 @@ export default function Step11Page() {
     birthYear,
     birthPlace,
     birthHour,
+    birthMinute,
     birthPeriod,
     relationshipStatus,
     goals,
     elementPreference,
   } = useOnboardingStore();
-
-  const day = parseInt(birthDay);
-  const year = parseInt(birthYear);
-  const hour24 = birthPeriod === "PM" 
-    ? (parseInt(birthHour) % 12) + 12 
-    : parseInt(birthHour) % 12;
-
-  const sunSign = getSunSign(birthMonth, day);
-  const moonSign = getMoonSign(birthMonth, day, year);
-  const ascendant = getAscendant(birthMonth, day, hour24);
 
   const genderLabel = gender === "male" ? "Man" : gender === "female" ? "Woman" : "Person";
   const elementLabel = elementPreference ? elementPreference.charAt(0).toUpperCase() + elementPreference.slice(1) : "Water";
@@ -68,8 +70,40 @@ export default function Step11Page() {
       setTimeout(() => setPhase(4), 6200),
       setTimeout(() => setPhase(5), 7200),
     ];
+
+    // Fetch AI-calculated signs
+    const fetchSigns = async () => {
+      try {
+        const response = await fetch("/api/astrology/signs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            birthMonth,
+            birthDay,
+            birthYear,
+            birthHour,
+            birthMinute,
+            birthPeriod,
+            birthPlace,
+          }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          setSunSign(data.sunSign);
+          setMoonSign(data.moonSign);
+          setAscendant(data.ascendant);
+          if (data.modality) setModality(data.modality);
+          if (data.polarity) setPolarity(data.polarity);
+        }
+      } catch (error) {
+        console.error("Failed to fetch signs:", error);
+      }
+    };
+
+    fetchSigns();
+
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [birthMonth, birthDay, birthYear, birthHour, birthMinute, birthPeriod, birthPlace]);
 
   const handleContinue = () => {
     router.push("/onboarding/step-12");
@@ -145,8 +179,8 @@ export default function Step11Page() {
             className="flex items-center justify-center gap-6 mb-6 relative z-10"
           >
             <div className="text-center">
-              <span className="text-2xl">♈</span>
-              <p className="text-sm font-medium mt-1">Cardinal</p>
+              <span className="text-2xl">{sunSign.symbol}</span>
+              <p className="text-sm font-medium mt-1">{modality}</p>
               <p className="text-xs text-muted-foreground">Modality</p>
             </div>
 
@@ -155,8 +189,8 @@ export default function Step11Page() {
             </div>
 
             <div className="text-center">
-              <span className="text-2xl">♀</span>
-              <p className="text-sm font-medium mt-1">Feminine</p>
+              <span className="text-2xl">{polarity === "Masculine" ? "♂" : "♀"}</span>
+              <p className="text-sm font-medium mt-1">{polarity}</p>
               <p className="text-xs text-muted-foreground">Polarity</p>
             </div>
           </motion.div>

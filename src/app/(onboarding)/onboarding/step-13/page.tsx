@@ -10,7 +10,7 @@ import { PalmScanAnimation } from "@/components/onboarding/PalmScanAnimation";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-type PageState = "intro" | "camera" | "analysis";
+type PageState = "intro" | "camera" | "preview" | "analysis";
 
 const fakeEmails = [
   { name: "Brian", email: "Brian***@aol.com" },
@@ -84,7 +84,9 @@ export default function Step13Page() {
     reader.onload = (event) => {
       const imageData = event.target?.result as string;
       setCapturedImage(imageData);
-      setPageState("analysis");
+      // Save to localStorage for step-15
+      localStorage.setItem("palmcosmic_palm_image", imageData);
+      setPageState("preview");
     };
     reader.readAsDataURL(file);
   };
@@ -103,7 +105,26 @@ export default function Step13Page() {
     ctx.drawImage(video, 0, 0);
 
     const imageData = canvas.toDataURL("image/jpeg", 0.9);
+    
+    // Stop camera immediately after capture
+    if (video.srcObject) {
+      const tracks = (video.srcObject as MediaStream).getTracks();
+      tracks.forEach((track) => track.stop());
+      video.srcObject = null;
+    }
+    
     setCapturedImage(imageData);
+    // Save to localStorage for step-15
+    localStorage.setItem("palmcosmic_palm_image", imageData);
+    setPageState("preview");
+  };
+
+  const handleRetake = () => {
+    setCapturedImage(null);
+    setPageState("camera");
+  };
+
+  const handleProceed = () => {
     setPageState("analysis");
   };
 
@@ -149,7 +170,7 @@ export default function Step13Page() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.2 }}
               >
-                <PalmScanAnimation size={180} />
+                <PalmScanAnimation size={240} />
               </motion.div>
             </div>
 
@@ -249,8 +270,8 @@ export default function Step13Page() {
               <Image
                 src="/palmoutline.png"
                 alt="Palm outline"
-                width={280}
-                height={350}
+                width={340}
+                height={420}
                 className="object-contain opacity-70"
               />
             </div>
@@ -282,6 +303,61 @@ export default function Step13Page() {
             >
               <div className="w-12 h-12 rounded-full bg-primary" />
             </motion.button>
+          </div>
+        </div>
+      )}
+
+      {/* Preview State - Show captured image with options */}
+      {pageState === "preview" && capturedImage && (
+        <div className="flex-1 flex flex-col">
+          <OnboardingHeader showBack currentStep={13} totalSteps={14} onBack={handleRetake} />
+          <ProgressBar currentStep={13} totalSteps={14} />
+
+          <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+            <motion.h2
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-xl font-bold text-center mb-6"
+            >
+              Review your palm photo
+            </motion.h2>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full max-w-sm aspect-[3/4] rounded-2xl overflow-hidden border border-border mb-6"
+            >
+              <img
+                src={capturedImage}
+                alt="Captured palm"
+                className="w-full h-full object-cover"
+              />
+            </motion.div>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-muted-foreground text-center text-sm mb-6"
+            >
+              Make sure your palm is clearly visible with good lighting
+            </motion.p>
+          </div>
+
+          <div className="p-6 space-y-3">
+            <Button
+              onClick={handleProceed}
+              className="w-full h-14 text-lg font-semibold"
+              size="lg"
+            >
+              Proceed
+            </Button>
+            <button
+              onClick={handleRetake}
+              className="w-full text-primary text-sm font-medium hover:underline"
+            >
+              Capture again
+            </button>
           </div>
         </div>
       )}

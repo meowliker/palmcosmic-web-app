@@ -46,7 +46,7 @@ export default function Step12Page() {
         </motion.h1>
 
         <div className="mb-8">
-          <ForecastSphere targetPercentage={67} duration={2.5} size={180} />
+          <ForecastSphere targetPercentage={67} startPercentage={34} duration={2.5} size={180} />
         </div>
 
         {showContent && (

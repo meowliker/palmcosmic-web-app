@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import Image from "next/image";
+import { useUserStore } from "@/lib/user-store";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -17,12 +18,12 @@ const progressSteps = [
 
 const upsellOffers = [
   {
-    id: "palm-reading",
-    name: "Palm Reading Report",
+    id: "2026-predictions",
+    name: "2026 Future Predictions",
     price: "$6.99",
     originalPrice: "$9.99",
     discount: "30% OFF",
-    icon: "/palm.png",
+    icon: "🔮",
   },
   {
     id: "birth-chart",
@@ -53,13 +54,86 @@ const upsellOffers = [
 
 export default function Step18Page() {
   const router = useRouter();
-  const [selectedOffer, setSelectedOffer] = useState<string | null>("ultra-pack");
+  const [selectedOffers, setSelectedOffers] = useState<Set<string>>(new Set(["ultra-pack"]));
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  
+  const { unlockFeature, unlockAllFeatures } = useUserStore();
 
-  const handleGetReport = () => {
-    router.push("/onboarding/step-19");
+  const handleSelectOffer = (offerId: string) => {
+    setSelectedOffers(prev => {
+      const newSet = new Set(prev);
+      
+      if (offerId === "ultra-pack") {
+        // Ultra pack is exclusive - selecting it deselects others
+        if (newSet.has("ultra-pack")) {
+          newSet.delete("ultra-pack");
+        } else {
+          newSet.clear();
+          newSet.add("ultra-pack");
+        }
+      } else {
+        // Individual items - toggle selection, but deselect ultra-pack if selected
+        if (newSet.has("ultra-pack")) {
+          newSet.delete("ultra-pack");
+        }
+        
+        if (newSet.has(offerId)) {
+          newSet.delete(offerId);
+        } else {
+          newSet.add(offerId);
+        }
+      }
+      
+      return newSet;
+    });
+  };
+
+  const calculateTotal = () => {
+    if (selectedOffers.has("ultra-pack")) return "$9.99";
+    const count = selectedOffers.size;
+    if (count === 0) return "$0.00";
+    return `$${(count * 6.99).toFixed(2)}`;
+  };
+
+  const handleGetReport = async () => {
+    if (selectedOffers.size === 0) return;
+
+    setPaymentError("");
+    setIsProcessing(true);
+
+    try {
+      const response = await fetch("/api/stripe/create-upsell-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selectedOffers: Array.from(selectedOffers),
+          userId: "",
+          email: localStorage.getItem("palmcosmic_email") || "",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
+      } else if (data.error) {
+        setPaymentError(data.error);
+        setIsProcessing(false);
+      } else {
+        setPaymentError("Unable to start checkout. Please try again.");
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error("Upsell checkout error:", error);
+      setPaymentError("Something went wrong. Please try again.");
+      setIsProcessing(false);
+    }
   };
 
   const handleSkip = () => {
+    // User skips upsells - only palm reading is unlocked (from base subscription)
     router.push("/onboarding/step-19");
   };
 
@@ -128,9 +202,9 @@ export default function Step18Page() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 + index * 0.1 }}
-              onClick={() => setSelectedOffer(offer.id)}
+              onClick={() => handleSelectOffer(offer.id)}
               className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${
-                selectedOffer === offer.id
+                selectedOffers.has(offer.id)
                   ? "border-primary bg-primary/10"
                   : "border-border bg-card hover:border-primary/50"
               }`}
@@ -167,12 +241,12 @@ export default function Step18Page() {
               {/* Selection indicator */}
               <div
                 className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                  selectedOffer === offer.id
+                  selectedOffers.has(offer.id)
                     ? "border-primary bg-primary"
                     : "border-muted-foreground"
                 }`}
               >
-                {selectedOffer === offer.id && (
+                {selectedOffers.has(offer.id) && (
                   <Check className="w-4 h-4 text-primary-foreground" />
                 )}
               </div>
@@ -183,16 +257,29 @@ export default function Step18Page() {
 
       {/* Bottom section */}
       <div className="p-6 space-y-3">
+        {/* Payment Error Message */}
+        {paymentError && (
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+            <p className="text-red-400 text-sm text-center">{paymentError}</p>
+          </div>
+        )}
+
         <Button
           onClick={handleGetReport}
+          disabled={selectedOffers.size === 0 || isProcessing}
           className="w-full h-14 text-lg font-semibold"
           size="lg"
         >
-          Get my PDF report *
+          {isProcessing 
+            ? "Processing..." 
+            : selectedOffers.size === 0 
+              ? "Select an offer" 
+              : `Get my reports - ${calculateTotal()}`}
         </Button>
 
         <button
           onClick={handleSkip}
+          disabled={isProcessing}
           className="w-full text-muted-foreground text-sm underline hover:text-foreground transition-colors"
         >
           No, I don&apos;t want to get my reports

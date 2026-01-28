@@ -40,7 +40,7 @@ export default function Step14Page() {
           transition={{ delay: 0.2 }}
           className="mb-8"
         >
-          <ForecastSphere targetPercentage={100} duration={2.5} size={180} />
+          <ForecastSphere targetPercentage={100} startPercentage={68} duration={2.5} size={180} />
         </motion.div>
 
         {/* Speech bubble */}
@@ -62,9 +62,9 @@ export default function Step14Page() {
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 1.8 }}
-          className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-200 to-amber-400 flex items-center justify-center text-lg mt-2"
+          className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center text-lg mt-2"
         >
-          👩
+          🔮
         </motion.div>
       </div>
 
