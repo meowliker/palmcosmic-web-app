@@ -1,11 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useUserStore } from "@/lib/user-store";
 import { useOnboardingStore } from "@/lib/onboarding-store";
@@ -56,7 +56,7 @@ const upsellOffers = [
   },
 ];
 
-export default function Step18Page() {
+function Step18Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selectedOffers, setSelectedOffers] = useState<Set<string>>(new Set(["ultra-pack"]));
@@ -383,5 +383,22 @@ export default function Step18Page() {
         </p>
       </div>
     </motion.div>
+  );
+}
+
+export default function Step18Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <Step18Content />
+    </Suspense>
   );
 }
