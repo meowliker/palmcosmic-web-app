@@ -6,7 +6,7 @@ import { fadeUp } from "@/lib/motion";
 import { OnboardingHeader, ProgressBar } from "@/components/onboarding/OnboardingHeader";
 import { Button } from "@/components/ui/button";
 import { PalmAnalysis } from "@/components/onboarding/PalmAnalysis";
-import { PalmScanAnimation } from "@/components/onboarding/PalmScanAnimation";
+import { detectPalmFeatures as detectPalmFeaturesFromImage } from "@/lib/palm-detection";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -25,12 +25,30 @@ export default function Step13Page() {
   const router = useRouter();
   const [pageState, setPageState] = useState<PageState>("intro");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [isPalmValid, setIsPalmValid] = useState<boolean | null>(null);
+  const [isValidatingPalm, setIsValidatingPalm] = useState(false);
   const [currentEmailIndex, setCurrentEmailIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [hasCamera, setHasCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const validatePalmImage = async (imageData: string): Promise<boolean> => {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.src = imageData;
+
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load image"));
+    });
+
+    const detected = await detectPalmFeaturesFromImage(img);
+    const fingertipCount = detected?.fingertips?.length || 0;
+    return fingertipCount >= 3;
+  };
 
   // Rotate emails
   useEffect(() => {
@@ -69,6 +87,8 @@ export default function Step13Page() {
   }, [pageState]);
 
   const handleTakePhoto = () => {
+    setScanError(null);
+    setIsPalmValid(null);
     setPageState("camera");
   };
 
@@ -86,6 +106,8 @@ export default function Step13Page() {
       setCapturedImage(imageData);
       // Save to localStorage for step-15
       localStorage.setItem("palmcosmic_palm_image", imageData);
+      setScanError(null);
+      setIsPalmValid(null);
       setPageState("preview");
     };
     reader.readAsDataURL(file);
@@ -116,17 +138,56 @@ export default function Step13Page() {
     setCapturedImage(imageData);
     // Save to localStorage for step-15
     localStorage.setItem("palmcosmic_palm_image", imageData);
+    setScanError(null);
+    setIsPalmValid(null);
     setPageState("preview");
   };
 
   const handleRetake = () => {
     setCapturedImage(null);
+    setScanError(null);
+    setIsPalmValid(null);
     setPageState("camera");
   };
 
   const handleProceed = () => {
+    if (isPalmValid === false) {
+      return;
+    }
     setPageState("analysis");
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (pageState !== "preview" || !capturedImage) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setIsValidatingPalm(true);
+        const ok = await validatePalmImage(capturedImage);
+        if (cancelled) return;
+
+        setIsPalmValid(ok);
+        if (!ok) {
+          setScanError("No palm detected. Please upload a clear photo of your left palm.");
+        } else {
+          setScanError(null);
+        }
+      } catch {
+        if (cancelled) return;
+        setIsPalmValid(false);
+        setScanError("Could not analyze the photo. Please try again with better lighting.");
+      } finally {
+        if (!cancelled) setIsValidatingPalm(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pageState, capturedImage]);
 
   const handleCameraBack = () => {
     // Stop camera and go back to intro
@@ -170,7 +231,16 @@ export default function Step13Page() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.2 }}
               >
-                <PalmScanAnimation size={240} />
+                <div className="w-[240px] h-[240px] rounded-2xl overflow-hidden bg-black/20">
+                  <video
+                    src="/palmscanner.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               </motion.div>
             </div>
 
@@ -270,9 +340,10 @@ export default function Step13Page() {
               <Image
                 src="/palmoutline.png"
                 alt="Palm outline"
-                width={340}
-                height={420}
+                width={380}
+                height={470}
                 className="object-contain opacity-70"
+                style={{ transform: "scaleX(-1) scale(1.15)" }}
               />
             </div>
 
@@ -313,7 +384,7 @@ export default function Step13Page() {
           <OnboardingHeader showBack currentStep={13} totalSteps={14} onBack={handleRetake} />
           <ProgressBar currentStep={13} totalSteps={14} />
 
-          <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+          <div className="flex-1 flex flex-col items-center px-6 pt-6 pb-2">
             <motion.h2
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -325,7 +396,7 @@ export default function Step13Page() {
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-sm aspect-[3/4] rounded-2xl overflow-hidden border border-border mb-6"
+              className="w-full max-w-sm h-[52vh] rounded-2xl overflow-hidden border border-border mb-4"
             >
               <img
                 src={capturedImage}
@@ -333,6 +404,14 @@ export default function Step13Page() {
                 className="w-full h-full object-cover"
               />
             </motion.div>
+
+            {scanError && (
+              <p className="text-red-400 text-sm text-center mb-2">{scanError}</p>
+            )}
+
+            {isValidatingPalm && (
+              <p className="text-muted-foreground text-center text-sm mb-2">Checking photo...</p>
+            )}
 
             <motion.p
               initial={{ opacity: 0 }}
@@ -347,6 +426,7 @@ export default function Step13Page() {
           <div className="p-6 space-y-3">
             <Button
               onClick={handleProceed}
+              disabled={isValidatingPalm || isPalmValid === false}
               className="w-full h-14 text-lg font-semibold"
               size="lg"
             >

@@ -25,6 +25,7 @@ function generateRandomStats() {
 export default function Step15Page() {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [palmImage, setPalmImage] = useState<string | null>(null);
 
   // Generate random stats once on mount
@@ -38,10 +39,23 @@ export default function Step15Page() {
     }
   }, []);
 
+  const isValidEmail = (value: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  };
+
   const handleContinue = () => {
+    const trimmed = email.trim();
+
+    if (trimmed.length > 0 && !isValidEmail(trimmed)) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+
+    setEmailError(null);
+
     // Store email if provided
-    if (email) {
-      localStorage.setItem("palmcosmic_email", email);
+    if (trimmed.length > 0) {
+      localStorage.setItem("palmcosmic_email", trimmed);
     }
     router.push("/onboarding/step-16");
   };
@@ -138,9 +152,16 @@ export default function Step15Page() {
             type="email"
             placeholder="Enter your email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full h-12 px-4 bg-white/10 border border-primary/30 rounded-lg text-black placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 mb-4"
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError(null);
+            }}
+            className="w-full h-12 px-4 bg-white/10 border border-primary/30 rounded-lg text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 mb-2"
           />
+
+          {emailError && (
+            <p className="text-red-400 text-sm mb-4 text-center">{emailError}</p>
+          )}
 
           <div className="flex items-start gap-2 text-xs text-muted-foreground mb-6">
             <Shield className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
