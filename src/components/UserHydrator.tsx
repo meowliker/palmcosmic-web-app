@@ -90,7 +90,10 @@ export default function UserHydrator() {
   }, [setSubscriptionPlan, setCoins, setFirebaseUserId, unlockAllFeatures, unlockFeature]);
 
   useEffect(() => {
-    hydrate();
+    // Wait for Firebase Auth to initialize before first hydration
+    const unsubscribe = auth.onAuthStateChanged(() => {
+      hydrate();
+    });
 
     const onPageShow = () => hydrate();
     const onVisibility = () => {
@@ -101,6 +104,7 @@ export default function UserHydrator() {
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
+      unsubscribe();
       window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("visibilitychange", onVisibility);
     };
