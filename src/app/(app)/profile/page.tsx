@@ -207,7 +207,12 @@ export default function ProfilePage() {
               {/* Element */}
               <div className="flex flex-col items-center">
                 <div className="w-16 h-16 rounded-full bg-[#1A1F2E] flex items-center justify-center border border-primary/20">
-                  <span className="text-2xl text-primary">🔥</span>
+                  <span className="text-2xl text-primary">
+                    {zodiacElements[sunSign] === "Fire" && "🔥"}
+                    {zodiacElements[sunSign] === "Water" && "💧"}
+                    {zodiacElements[sunSign] === "Earth" && "🌍"}
+                    {zodiacElements[sunSign] === "Air" && "💨"}
+                  </span>
                 </div>
                 <p className="text-white/50 text-xs mt-2">Element</p>
                 <p className="text-white font-medium text-sm">{zodiacElements[sunSign] || "Fire"}</p>

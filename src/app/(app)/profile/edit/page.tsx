@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useUserStore } from "@/lib/user-store";
 import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 
 const months = [
   "January", "February", "March", "April", "May", "June",
@@ -49,13 +49,64 @@ export default function EditProfilePage() {
   } = useOnboardingStore();
 
   const [localName, setLocalName] = useState("You");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setIsClient(true);
-    // Load name from localStorage
-    const savedName = localStorage.getItem("palmcosmic_name");
-    if (savedName) setLocalName(savedName);
+    loadUserProfile();
   }, []);
+
+  const loadUserProfile = async () => {
+    setIsLoading(true);
+    try {
+      // Get userId - prefer Firebase Auth uid
+      const authUid = auth.currentUser?.uid;
+      const storedId = localStorage.getItem("palmcosmic_user_id");
+      const userId = authUid || storedId;
+
+      if (!userId) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Update localStorage if using auth uid
+      if (authUid && storedId !== authUid) {
+        localStorage.setItem("palmcosmic_user_id", authUid);
+      }
+
+      // Load from Firebase
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        
+        // Populate all fields from Firebase
+        if (data.name) setLocalName(data.name);
+        if (data.gender) setGender(data.gender);
+        if (data.relationshipStatus) setRelationshipStatus(data.relationshipStatus);
+        if (data.birthMonth && data.birthDay && data.birthYear) {
+          setBirthDate(String(data.birthMonth), String(data.birthDay), String(data.birthYear));
+        }
+        if (data.birthPlace) setBirthPlace(data.birthPlace);
+        if (data.birthHour) {
+          setBirthTime(
+            String(data.birthHour),
+            String(data.birthMinute || 0),
+            data.birthPeriod || "AM"
+          );
+        }
+      } else {
+        // Fallback to localStorage for name
+        const savedName = localStorage.getItem("palmcosmic_name");
+        if (savedName) setLocalName(savedName);
+      }
+    } catch (error) {
+      console.error("Error loading profile:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const formatBirthDate = () => {
     if (!birthMonth || !birthDay || !birthYear) return "Not set";
@@ -579,7 +630,7 @@ function EditTextModal({ title, value, onChange, onSave, onClose, isSaving }: {
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-[#0A0E1A] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37]"
+          className="w-full bg-[#0A0E1A] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
           autoFocus
         />
         <div className="flex gap-3 mt-4">
@@ -593,7 +644,7 @@ function EditTextModal({ title, value, onChange, onSave, onClose, isSaving }: {
           <Button
             onClick={onSave}
             disabled={isSaving}
-            className="flex-1 bg-[#D4AF37] hover:bg-[#E5C048] text-black"
+            className="flex-1 bg-primary hover:bg-primary/90 text-white"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
           </Button>
@@ -731,7 +782,7 @@ function SelectModal({ title, options, selected, onSelect, onClose }: {
               onClick={() => onSelect(option)}
               className={`w-full p-3 rounded-xl text-left transition-colors ${
                 selected === option
-                  ? "bg-[#D4AF37] text-black"
+                  ? "bg-primary text-white"
                   : "bg-[#0A0E1A] text-white hover:bg-white/10"
               }`}
             >
@@ -816,7 +867,7 @@ function DatePickerModal({ month, day, year, onSave, onClose, isSaving }: {
           <Button
             onClick={() => onSave(m, d, y)}
             disabled={isSaving}
-            className="flex-1 bg-[#D4AF37] hover:bg-[#E5C048] text-black"
+            className="flex-1 bg-primary hover:bg-primary/90 text-white"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
           </Button>
@@ -894,7 +945,7 @@ function TimePickerModal({ hour, minute, period, onSave, onClose, isSaving }: {
           <Button
             onClick={() => onSave(h, m, p)}
             disabled={isSaving}
-            className="flex-1 bg-[#D4AF37] hover:bg-[#E5C048] text-black"
+            className="flex-1 bg-primary hover:bg-primary/90 text-white"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
           </Button>
