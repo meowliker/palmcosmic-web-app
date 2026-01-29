@@ -197,6 +197,7 @@ export default function ManageSubscriptionPage() {
         body: JSON.stringify({
           userId: localStorage.getItem("palmcosmic_user_id") || "",
           subscriptionId: subscriptionStatus.stripeSubscriptionId,
+          email: localStorage.getItem("palmcosmic_email") || "",
         }),
       });
 

@@ -7,12 +7,15 @@ import { useOnboardingStore } from "@/lib/onboarding-store";
 import { OnboardingHeader, ProgressBar } from "@/components/onboarding/OnboardingHeader";
 import { Button } from "@/components/ui/button";
 import { LocationInput } from "@/components/onboarding/LocationInput";
+import { useHaptic } from "@/hooks/useHaptic";
 
 export default function BirthplacePage() {
   const router = useRouter();
   const { birthPlace, setBirthPlace } = useOnboardingStore();
+  const { triggerLight } = useHaptic();
 
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/step-5");
   };
 
@@ -44,7 +47,7 @@ export default function BirthplacePage() {
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="px-6 pb-24">
         <Button
           onClick={handleContinue}
           className="w-full h-14 text-lg font-semibold"

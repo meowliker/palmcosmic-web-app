@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const sign = searchParams.get("sign")?.toLowerCase();
   const period = searchParams.get("period") || "daily";
+  const day = searchParams.get("day") || "TODAY"; // TODAY or TOMORROW
 
   if (!sign || !ZODIAC_SIGNS.includes(sign)) {
     return NextResponse.json(
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest) {
     // Determine the cache key based on period
     let cacheKey = "";
     let cacheDocId = "";
+    let apiDay = "TODAY";
     
     switch (period) {
       case "weekly":
@@ -91,7 +93,14 @@ export async function GET(request: NextRequest) {
         break;
       case "daily":
       default:
-        cacheKey = getDateKey();
+        // For daily, use different cache keys for TODAY vs TOMORROW
+        if (day === "TOMORROW") {
+          cacheKey = getDateKey(1); // Tomorrow's date
+          apiDay = "TOMORROW";
+        } else {
+          cacheKey = getDateKey(0); // Today's date
+          apiDay = "TODAY";
+        }
         cacheDocId = `horoscope_daily_${sign}_${cacheKey}`;
         break;
     }
@@ -106,13 +115,14 @@ export async function GET(request: NextRequest) {
         data: cachedData.horoscope,
         period,
         sign,
+        day: apiDay,
         cached: true,
         cacheKey,
       });
     }
 
     // No cache found - fetch from API
-    const apiResponse = await fetchHoroscopeFromAPI(sign, period);
+    const apiResponse = await fetchHoroscopeFromAPI(sign, period, apiDay);
     const horoscopeData = apiResponse.data;
 
     // Save to Firebase cache

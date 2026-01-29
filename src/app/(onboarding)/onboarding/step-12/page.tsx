@@ -7,6 +7,7 @@ import { OnboardingHeader, ProgressBar } from "@/components/onboarding/Onboardin
 import { Button } from "@/components/ui/button";
 import { ForecastSphere } from "@/components/onboarding/ForecastSphere";
 import { useRouter } from "next/navigation";
+import { useHaptic } from "@/hooks/useHaptic";
 
 export default function Step12Page() {
   const router = useRouter();
@@ -22,7 +23,9 @@ export default function Step12Page() {
     };
   }, []);
 
+  const { triggerLight } = useHaptic();
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/step-13");
   };
 
@@ -80,7 +83,7 @@ export default function Step12Page() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="p-6"
+          className="px-6 pb-24"
         >
           <Button
             onClick={handleContinue}

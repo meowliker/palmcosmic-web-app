@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useHaptic } from "@/hooks/useHaptic";
 
 const goalOptions = [
   { id: "family-harmony", label: "Family harmony", emoji: "👨‍👩‍👧" },
@@ -24,6 +25,7 @@ const MAX_SELECTIONS = 3;
 export default function Step8Page() {
   const router = useRouter();
   const { goals, setGoals } = useOnboardingStore();
+  const { triggerLight } = useHaptic();
 
   const toggleGoal = (goalId: string) => {
     if (goals.includes(goalId)) {
@@ -34,6 +36,7 @@ export default function Step8Page() {
   };
 
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/step-9");
   };
 
@@ -92,7 +95,7 @@ export default function Step8Page() {
         </motion.div>
       </div>
 
-      <div className="p-6">
+      <div className="px-6 pb-24">
         <Button
           onClick={handleContinue}
           className="w-full h-14 text-lg font-semibold"

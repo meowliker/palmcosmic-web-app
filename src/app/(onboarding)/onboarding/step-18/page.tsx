@@ -12,6 +12,7 @@ import { useOnboardingStore } from "@/lib/onboarding-store";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { generateUserId } from "@/lib/user-profile";
+import { pixelEvents } from "@/lib/pixel-events";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -71,6 +72,10 @@ function Step18Content() {
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (sessionId) {
+      // Track subscription purchase with Meta Pixel
+      // Default to monthly plan value, actual value comes from Stripe webhook
+      pixelEvents.subscribe(9.99, "PalmCosmic Subscription");
+      
       // User just completed payment - analyze palm and add coins
       analyzePalmAfterPayment();
     }

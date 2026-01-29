@@ -9,6 +9,7 @@ import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useUserStore } from "@/lib/user-store";
 import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
+import { getZodiacSign } from "@/lib/astrology-api";
 
 const months = [
   "January", "February", "March", "April", "May", "June",
@@ -158,19 +159,71 @@ export default function EditProfilePage() {
       const userId = localStorage.getItem("palmcosmic_user_id");
       if (userId) {
         const userRef = doc(db, "users", userId);
-        await setDoc(userRef, {
+        
+        // Determine the new birth details
+        const newBirthMonth = field === "birthDate" ? value.month : birthMonth;
+        const newBirthDay = field === "birthDate" ? value.day : birthDay;
+        const newBirthYear = field === "birthDate" ? value.year : birthYear;
+        const newBirthHour = field === "birthTime" ? value.hour : birthHour;
+        const newBirthMinute = field === "birthTime" ? value.minute : birthMinute;
+        const newBirthPeriod = field === "birthTime" ? value.period : birthPeriod;
+        const newBirthPlace = field === "birthPlace" ? value : birthPlace;
+        
+        // Calculate sun sign from birth date
+        const sunSign = newBirthMonth && newBirthDay 
+          ? getZodiacSign(Number(newBirthMonth), Number(newBirthDay))
+          : null;
+        
+        // Base update data
+        const updateData: any = {
           name: field === "name" ? value : localName,
           gender: field === "gender" ? value : gender,
           relationshipStatus: field === "relationship" ? value : relationshipStatus,
-          birthMonth: field === "birthDate" ? value.month : birthMonth,
-          birthDay: field === "birthDate" ? value.day : birthDay,
-          birthYear: field === "birthDate" ? value.year : birthYear,
-          birthPlace: field === "birthPlace" ? value : birthPlace,
-          birthHour: field === "birthTime" ? value.hour : birthHour,
-          birthMinute: field === "birthTime" ? value.minute : birthMinute,
-          birthPeriod: field === "birthTime" ? value.period : birthPeriod,
+          birthMonth: newBirthMonth,
+          birthDay: newBirthDay,
+          birthYear: newBirthYear,
+          birthPlace: newBirthPlace,
+          birthHour: newBirthHour,
+          birthMinute: newBirthMinute,
+          birthPeriod: newBirthPeriod,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        };
+        
+        // If birth details changed, recalculate signs
+        if (field === "birthDate" || field === "birthTime" || field === "birthPlace") {
+          // Update sun sign immediately (calculated locally)
+          if (sunSign) {
+            updateData.sunSign = sunSign;
+          }
+          
+          // Recalculate moon and ascendant signs via API
+          try {
+            const response = await fetch("/api/astrology/signs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                birthMonth: newBirthMonth,
+                birthDay: newBirthDay,
+                birthYear: newBirthYear,
+                birthHour: newBirthHour,
+                birthMinute: newBirthMinute,
+                birthPeriod: newBirthPeriod,
+                birthPlace: newBirthPlace,
+              }),
+            });
+            const signsData = await response.json();
+            if (signsData.success) {
+              updateData.sunSign = signsData.sunSign;
+              updateData.moonSign = signsData.moonSign;
+              updateData.ascendantSign = signsData.ascendant;
+            }
+          } catch (signsError) {
+            console.error("Error recalculating signs:", signsError);
+            // Still save the sun sign we calculated locally
+          }
+        }
+        
+        await setDoc(userRef, updateData, { merge: true });
       }
     } catch (error) {
       console.error("Error saving:", error);

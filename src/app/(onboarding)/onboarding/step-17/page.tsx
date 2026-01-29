@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Check, Shield, Coins } from "lucide-react";
 import { useUserStore, SubscriptionPlan } from "@/lib/user-store";
 import { generateUserId } from "@/lib/user-profile";
+import { pixelEvents } from "@/lib/pixel-events";
 
 const pricingPlans = [
   {
@@ -113,6 +114,10 @@ export default function Step17Page() {
   const handleStartTrial = async () => {
     setPaymentError("");
     setIsProcessing(true);
+    
+    // Track trial initiation
+    const planPrice = selectedPlan === "weekly" ? 4.99 : selectedPlan === "monthly" ? 9.99 : 49.99;
+    pixelEvents.startTrial(planPrice);
 
     try {
       // Create Stripe checkout session

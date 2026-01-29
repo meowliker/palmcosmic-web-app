@@ -7,6 +7,9 @@ import { ArrowLeft, User, Settings, ChevronRight } from "lucide-react";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useUserStore } from "@/lib/user-store";
 import { getZodiacSign, getZodiacSymbol, getZodiacColor } from "@/lib/astrology-api";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 // Zodiac symbols mapping
 const zodiacSymbols: Record<string, string> = {
@@ -46,27 +49,154 @@ const zodiacModality: Record<string, string> = {
 export default function ProfilePage() {
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userData, setUserData] = useState<{
+    birthMonth: string;
+    birthDay: string;
+    birthYear: string;
+    birthHour: string;
+    birthMinute: string;
+    birthPeriod: string;
+    sunSign: string;
+    moonSign: string;
+    ascendantSign: string;
+  } | null>(null);
   
   const { 
-    birthMonth, birthDay, birthYear, birthHour, birthMinute, birthPeriod,
-    ascendantSign, moonSign
+    birthMonth: storeBirthMonth, birthDay: storeBirthDay, birthYear: storeBirthYear, 
+    birthHour: storeBirthHour, birthMinute: storeBirthMinute, birthPeriod: storeBirthPeriod,
+    ascendantSign: storeAscendantSign, moonSign: storeMoonSign
   } = useOnboardingStore();
   
   const { subscriptionPlan } = useUserStore();
 
   useEffect(() => {
     setIsClient(true);
+    
+    // Wait for Firebase Auth to be ready before loading user data
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      loadUserData();
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Calculate sun sign from birth date
-  const getSunSign = () => {
-    if (!birthMonth || !birthDay) return "Aries";
-    return getZodiacSign(Number(birthMonth), Number(birthDay));
+  const loadUserData = async () => {
+    setIsLoading(true);
+    try {
+      const authUid = auth.currentUser?.uid;
+      const storedId = localStorage.getItem("palmcosmic_user_id");
+      const userId = authUid || storedId;
+
+      if (userId) {
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          const month = data.birthMonth ? String(data.birthMonth) : storeBirthMonth;
+          const day = data.birthDay ? String(data.birthDay) : storeBirthDay;
+          const year = data.birthYear ? String(data.birthYear) : storeBirthYear;
+          const hour = data.birthHour || storeBirthHour || "12";
+          const minute = data.birthMinute || storeBirthMinute || "00";
+          const period = data.birthPeriod || storeBirthPeriod || "PM";
+          const place = data.birthPlace || "";
+          
+          // Handle signs - they may be stored as objects with .name or as strings
+          const extractSignName = (sign: any): string | null => {
+            if (!sign) return null;
+            if (typeof sign === "string") return sign;
+            if (sign.name) return sign.name;
+            return null;
+          };
+
+          // Calculate sun sign from birth date if not stored
+          const calculatedSunSign = month && day ? getZodiacSign(Number(month), Number(day)) : "Aries";
+          
+          let moonSignValue = extractSignName(data.moonSign);
+          let ascendantValue = extractSignName(data.ascendantSign);
+          
+          // If moon or ascendant signs are missing, fetch them from API and save to Firebase
+          if (!moonSignValue || !ascendantValue) {
+            try {
+              const response = await fetch("/api/astrology/signs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  birthMonth: month,
+                  birthDay: day,
+                  birthYear: year,
+                  birthHour: hour,
+                  birthMinute: minute,
+                  birthPeriod: period,
+                  birthPlace: place,
+                }),
+              });
+              const signsData = await response.json();
+              if (signsData.success) {
+                moonSignValue = extractSignName(signsData.moonSign) || "Cancer";
+                ascendantValue = extractSignName(signsData.ascendant) || "Leo";
+                
+                // Save signs to Firebase for future use
+                await setDoc(userRef, {
+                  sunSign: signsData.sunSign,
+                  moonSign: signsData.moonSign,
+                  ascendantSign: signsData.ascendant,
+                }, { merge: true });
+              }
+            } catch (signsError) {
+              console.error("Error fetching signs:", signsError);
+              moonSignValue = moonSignValue || "Cancer";
+              ascendantValue = ascendantValue || "Leo";
+            }
+          }
+
+          setUserData({
+            birthMonth: month,
+            birthDay: day,
+            birthYear: year,
+            birthHour: hour,
+            birthMinute: minute,
+            birthPeriod: period,
+            sunSign: extractSignName(data.sunSign) || calculatedSunSign,
+            moonSign: moonSignValue || "Cancer",
+            ascendantSign: ascendantValue || "Leo",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Fallback to onboarding store
+      if (storeBirthMonth && storeBirthDay) {
+        setUserData({
+          birthMonth: storeBirthMonth,
+          birthDay: storeBirthDay,
+          birthYear: storeBirthYear,
+          birthHour: storeBirthHour || "12",
+          birthMinute: storeBirthMinute || "00",
+          birthPeriod: storeBirthPeriod || "PM",
+          sunSign: getZodiacSign(Number(storeBirthMonth), Number(storeBirthDay)),
+          moonSign: storeMoonSign?.name || "Cancer",
+          ascendantSign: storeAscendantSign?.name || "Leo",
+        });
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const sunSign = getSunSign();
-  const userMoonSign = moonSign?.name || "Cancer";
-  const userAscendant = ascendantSign?.name || "Leo";
+  const sunSign = userData?.sunSign || (isLoading ? "Loading..." : "Aries");
+  const userMoonSign = userData?.moonSign || (isLoading ? "Loading..." : "Cancer");
+  const userAscendant = userData?.ascendantSign || (isLoading ? "Loading..." : "Leo");
+  const birthMonth = userData?.birthMonth || storeBirthMonth;
+  const birthDay = userData?.birthDay || storeBirthDay;
+  const birthYear = userData?.birthYear || storeBirthYear;
+  const birthHour = userData?.birthHour || storeBirthHour || "12";
+  const birthMinute = userData?.birthMinute || storeBirthMinute || "00";
+  const birthPeriod = userData?.birthPeriod || storeBirthPeriod || "PM";
 
   // Format birth date and time
   const formatBirthDateTime = () => {

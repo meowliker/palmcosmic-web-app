@@ -6,6 +6,7 @@ import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Shield } from "lucide-react";
+import { useHaptic } from "@/hooks/useHaptic";
 
 // Generate random stats with some variation for authenticity
 function generateRandomStats() {
@@ -43,7 +44,9 @@ export default function Step15Page() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
   };
 
+  const { triggerLight } = useHaptic();
   const handleContinue = () => {
+    triggerLight();
     const trimmed = email.trim();
 
     if (trimmed.length > 0 && !isValidEmail(trimmed)) {
@@ -172,7 +175,7 @@ export default function Step15Page() {
         </motion.div>
       </div>
 
-      <div className="p-6">
+      <div className="px-6 pb-24">
         <Button
           onClick={handleContinue}
           className="w-full h-14 text-lg font-semibold"

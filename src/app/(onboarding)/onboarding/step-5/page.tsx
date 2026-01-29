@@ -9,6 +9,7 @@ import { ZodiacWheel } from "@/components/onboarding/ZodiacWheel";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useRouter } from "next/navigation";
 import { Sparkles, Circle, Flame, Moon } from "lucide-react";
+import { useHaptic } from "@/hooks/useHaptic";
 
 const insightTags = [
   { icon: "✨", label: "Your challenges" },
@@ -86,7 +87,10 @@ export default function Step5Page() {
     };
   }, [birthMonth, birthDay, birthYear, birthHour, birthMinute, birthPeriod, birthPlace]);
 
+  const { triggerLight } = useHaptic();
+  
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/step-6");
   };
 
@@ -193,7 +197,7 @@ export default function Step5Page() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="p-6"
+          className="px-6 pb-24"
         >
           <Button
             onClick={handleContinue}

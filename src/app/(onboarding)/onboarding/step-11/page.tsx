@@ -7,6 +7,7 @@ import { OnboardingHeader, ProgressBar } from "@/components/onboarding/Onboardin
 import { Button } from "@/components/ui/button";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useRouter } from "next/navigation";
+import { useHaptic } from "@/hooks/useHaptic";
 
 interface SignData {
   name: string;
@@ -105,7 +106,9 @@ export default function Step11Page() {
     return () => timers.forEach(clearTimeout);
   }, [birthMonth, birthDay, birthYear, birthHour, birthMinute, birthPeriod, birthPlace]);
 
+  const { triggerLight } = useHaptic();
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/step-12");
   };
 
@@ -310,7 +313,7 @@ export default function Step11Page() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="p-6"
+            className="px-6 pb-24"
           >
             <motion.div
               initial={{ scale: 0.95 }}

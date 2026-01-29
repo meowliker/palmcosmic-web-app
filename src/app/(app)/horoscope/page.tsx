@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { X, ChevronDown, Loader2 } from "lucide-react";
 import { getZodiacSign, getZodiacSymbol } from "@/lib/astrology-api";
 import { useOnboardingStore } from "@/lib/onboarding-store";
+import { doc, getDoc } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
 
 const ZODIAC_SIGNS = [
   { sign: "Aries", symbol: "♈" },
@@ -46,24 +48,48 @@ export default function HoroscopePage() {
   const [loading, setLoading] = useState(true);
   const [horoscopeData, setHoroscopeData] = useState<HoroscopeData | null>(null);
 
-  // Get ascendant sign from store (preferred) or fall back to sun sign
-  const { ascendantSign } = useOnboardingStore();
+  // Get birth date from onboarding store as fallback
+  const { birthMonth: storeBirthMonth, birthDay: storeBirthDay } = useOnboardingStore();
 
   useEffect(() => {
-    // Use ascendant sign if available (for personalized horoscope based on rising sign)
-    if (ascendantSign?.name) {
-      setSelectedSign(ascendantSign.name);
-      return;
+    loadUserSign();
+  }, []);
+
+  const loadUserSign = async () => {
+    try {
+      // Get userId - prefer Firebase Auth uid
+      const authUid = auth.currentUser?.uid;
+      const storedId = localStorage.getItem("palmcosmic_user_id");
+      const userId = authUid || storedId;
+
+      if (userId) {
+        // Load birth date from Firebase
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          if (data.birthMonth && data.birthDay) {
+            const month = Number(data.birthMonth);
+            const day = Number(data.birthDay);
+            const sign = getZodiacSign(month, day);
+            setSelectedSign(sign);
+            return;
+          }
+        }
+      }
+
+      // Fallback to onboarding store
+      if (storeBirthMonth && storeBirthDay) {
+        const month = Number(storeBirthMonth);
+        const day = Number(storeBirthDay);
+        const sign = getZodiacSign(month, day);
+        setSelectedSign(sign);
+      }
+    } catch (error) {
+      console.error("Error loading user sign:", error);
     }
-    
-    // Fall back to stored birth date
-    const storedBirthDate = localStorage.getItem("birthDate");
-    if (storedBirthDate) {
-      const date = new Date(storedBirthDate);
-      const sign = getZodiacSign(date.getMonth() + 1, date.getDate());
-      setSelectedSign(sign);
-    }
-  }, [ascendantSign]);
+  };
 
   useEffect(() => {
     fetchHoroscope();
@@ -74,10 +100,12 @@ export default function HoroscopePage() {
     try {
       const periodConfig = PERIODS.find((p) => p.id === selectedPeriod);
       const period = periodConfig?.period || "daily";
+      const day = periodConfig?.day || "TODAY";
 
       // Use cached endpoint which stores horoscopes in Firebase
+      // Pass day parameter for daily horoscopes (TODAY vs TOMORROW)
       const response = await fetch(
-        `/api/horoscope/cached?sign=${selectedSign}&period=${period}`
+        `/api/horoscope/cached?sign=${selectedSign}&period=${period}&day=${day}`
       );
 
       if (response.ok) {
@@ -98,28 +126,34 @@ export default function HoroscopePage() {
     day: "numeric",
   });
 
-  // Generate mock Focus and Troubles based on horoscope text
-  const generateInsights = (text: string) => {
+  // Generate deterministic Focus and Troubles based on sign and period
+  const generateInsights = (sign: string, period: string) => {
     const focusWords = ["Growth", "Optimism", "Creativity", "Balance", "Communication", "Love", "Career", "Health"];
     const troubleWords = ["Conflict", "Misunderstanding", "Tension", "Doubt", "Stress", "Impatience"];
     
-    // Randomly select 3 focus and 3 trouble words for variety
-    const shuffledFocus = focusWords.sort(() => 0.5 - Math.random()).slice(0, 3);
-    const shuffledTroubles = troubleWords.sort(() => 0.5 - Math.random()).slice(0, 3);
+    // Create a deterministic seed from sign and period
+    const seed = (sign + period).split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
     
-    return { focus: shuffledFocus, troubles: shuffledTroubles };
+    // Deterministic selection based on seed
+    const focusIndices = [seed % 8, (seed + 3) % 8, (seed + 5) % 8];
+    const troubleIndices = [seed % 6, (seed + 2) % 6, (seed + 4) % 6];
+    
+    const selectedFocus = [...new Set(focusIndices)].slice(0, 3).map(i => focusWords[i]);
+    const selectedTroubles = [...new Set(troubleIndices)].slice(0, 3).map(i => troubleWords[i]);
+    
+    return { focus: selectedFocus, troubles: selectedTroubles };
   };
 
-  const insights = horoscopeData ? generateInsights(horoscopeData.horoscope_data) : { focus: [], troubles: [] };
+  const insights = generateInsights(selectedSign, selectedPeriod);
 
   // Extract a title from the horoscope text (first sentence or phrase)
-  const getTitle = (text: string) => {
+  const getTitle = (text: string, sign: string, period: string) => {
     if (!text) return "Your Horoscope";
     const sentences = text.split(/[.!?]/);
     if (sentences[0] && sentences[0].length < 50) {
       return sentences[0].trim();
     }
-    // Generate a motivational title
+    // Generate a deterministic title based on sign and period
     const titles = [
       "Harness your potential now",
       "Embrace New Opportunities",
@@ -127,7 +161,8 @@ export default function HoroscopePage() {
       "Trust Your Intuition",
       "A Day of Discovery",
     ];
-    return titles[Math.floor(Math.random() * titles.length)];
+    const seed = (sign + period).split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return titles[seed % titles.length];
   };
 
   // Generate a tip from the horoscope
@@ -198,7 +233,7 @@ export default function HoroscopePage() {
             >
               {/* Title */}
               <h1 className="text-2xl md:text-3xl font-bold text-white mb-6" style={{ fontFamily: "serif" }}>
-                {getTitle(horoscopeData?.horoscope_data || "")}
+                {getTitle(horoscopeData?.horoscope_data || "", selectedSign, selectedPeriod)}
               </h1>
 
               {/* Transits Badge */}

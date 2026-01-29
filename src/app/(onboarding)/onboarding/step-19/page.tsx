@@ -11,6 +11,8 @@ import { saveUserProfile } from "@/lib/user-profile";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import { useHaptic } from "@/hooks/useHaptic";
+import { pixelEvents } from "@/lib/pixel-events";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -176,6 +178,7 @@ export default function Step19Page() {
       });
 
       setShowSuccess(true);
+      pixelEvents.completeRegistration(email); // Track registration completion
     } catch (err) {
       console.error("Sign up failed:", err);
     } finally {
@@ -183,7 +186,9 @@ export default function Step19Page() {
     }
   };
 
+  const { triggerLight } = useHaptic();
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/step-20");
   };
 
@@ -339,7 +344,7 @@ export default function Step19Page() {
       </div>
 
       {/* Sign up button */}
-      <div className="p-6">
+      <div className="px-6 pb-24">
         <Button
           onClick={handleSignUp}
           disabled={!email || !password || password !== confirmPassword || isLoading}

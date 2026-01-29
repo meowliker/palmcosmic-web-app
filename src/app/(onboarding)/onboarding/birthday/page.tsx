@@ -7,6 +7,7 @@ import { useOnboardingStore } from "@/lib/onboarding-store";
 import { OnboardingHeader, ProgressBar } from "@/components/onboarding/OnboardingHeader";
 import { WheelPicker } from "@/components/onboarding/WheelPicker";
 import { Button } from "@/components/ui/button";
+import { useHaptic } from "@/hooks/useHaptic";
 
 const months = [
   "January", "February", "March", "April", "May", "June",
@@ -19,8 +20,10 @@ const years = Array.from({ length: 100 }, (_, i) => String(2010 - i));
 export default function BirthdayPage() {
   const router = useRouter();
   const { birthMonth, birthDay, birthYear, setBirthDate } = useOnboardingStore();
+  const { triggerLight } = useHaptic();
 
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/birth-time");
   };
 
@@ -67,7 +70,7 @@ export default function BirthdayPage() {
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="px-6 pb-24">
         <Button
           onClick={handleContinue}
           className="w-full h-14 text-lg font-semibold"

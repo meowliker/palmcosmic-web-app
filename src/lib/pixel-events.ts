@@ -1,0 +1,140 @@
+// Meta Pixel Event Tracking
+// Use these functions to track conversions and user actions
+
+declare global {
+  interface Window {
+    fbq: (...args: any[]) => void;
+  }
+}
+
+/**
+ * Track a custom event with Meta Pixel
+ */
+export const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
+  if (typeof window !== "undefined" && window.fbq) {
+    window.fbq("track", eventName, params);
+  }
+};
+
+/**
+ * Track a custom event (for events not in Meta's standard list)
+ */
+export const trackCustomEvent = (eventName: string, params?: Record<string, any>) => {
+  if (typeof window !== "undefined" && window.fbq) {
+    window.fbq("trackCustom", eventName, params);
+  }
+};
+
+// ============================================
+// Standard Meta Pixel Events for PalmCosmic
+// ============================================
+
+export const pixelEvents = {
+  // --- Onboarding Funnel ---
+  
+  /** User lands on the app/starts onboarding */
+  lead: () => trackPixelEvent("Lead"),
+  
+  /** User completes sign-up (creates account) */
+  completeRegistration: (email?: string) => 
+    trackPixelEvent("CompleteRegistration", { 
+      content_name: "PalmCosmic Account",
+      ...(email && { email })
+    }),
+  
+  // --- Trial & Subscription ---
+  
+  /** User starts free trial */
+  startTrial: (value: number = 0) => 
+    trackPixelEvent("StartTrial", { 
+      value, 
+      currency: "USD",
+      content_name: "PalmCosmic Trial"
+    }),
+  
+  /** User subscribes (weekly/monthly/yearly) */
+  subscribe: (value: number, plan: string) => 
+    trackPixelEvent("Subscribe", { 
+      value, 
+      currency: "USD",
+      content_name: plan,
+      predicted_ltv: value * 12 // Estimated yearly value
+    }),
+  
+  // --- Purchases ---
+  
+  /** User initiates checkout */
+  initiateCheckout: (value: number, items: string[]) => 
+    trackPixelEvent("InitiateCheckout", { 
+      value, 
+      currency: "USD",
+      content_ids: items,
+      num_items: items.length
+    }),
+  
+  /** User completes a purchase */
+  purchase: (value: number, productId: string, productName: string) => 
+    trackPixelEvent("Purchase", { 
+      value, 
+      currency: "USD",
+      content_ids: [productId],
+      content_name: productName,
+      content_type: "product"
+    }),
+  
+  /** User buys coins */
+  purchaseCoins: (value: number, coinAmount: number) => 
+    trackPixelEvent("Purchase", { 
+      value, 
+      currency: "USD",
+      content_ids: [`coins-${coinAmount}`],
+      content_name: `${coinAmount} Coins`,
+      content_type: "product"
+    }),
+  
+  // --- Engagement ---
+  
+  /** User views a specific content/feature */
+  viewContent: (contentName: string, contentType: string) => 
+    trackPixelEvent("ViewContent", { 
+      content_name: contentName,
+      content_type: contentType
+    }),
+  
+  /** User uses chat (contact) */
+  contact: () => trackPixelEvent("Contact"),
+  
+  /** User searches */
+  search: (query: string) => 
+    trackPixelEvent("Search", { search_string: query }),
+};
+
+// ============================================
+// Custom Events for Detailed Funnel Tracking
+// ============================================
+
+export const customEvents = {
+  // Onboarding step tracking
+  onboardingStep: (step: number, stepName: string) => 
+    trackCustomEvent("OnboardingStep", { step, step_name: stepName }),
+  
+  // Palm scan completed
+  palmScanComplete: () => 
+    trackCustomEvent("PalmScanComplete"),
+  
+  // Birth chart viewed
+  birthChartViewed: () => 
+    trackCustomEvent("BirthChartViewed"),
+  
+  // Horoscope viewed
+  horoscopeViewed: (sign: string, period: string) => 
+    trackCustomEvent("HoroscopeViewed", { sign, period }),
+  
+  // Chat message sent
+  chatMessageSent: () => 
+    trackCustomEvent("ChatMessageSent"),
+  
+  // Feature unlocked
+  featureUnlocked: (feature: string) => 
+    trackCustomEvent("FeatureUnlocked", { feature }),
+};

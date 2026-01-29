@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Star, Sun, Moon, Sparkles, Loader2, Lock } from "lucide-react";
+import { ChevronRight, Star, Sun, Moon, Sparkles, Loader2, Lock, MessageCircle } from "lucide-react";
 import { getZodiacSign, getZodiacSymbol, getZodiacColor } from "@/lib/astrology-api";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { useUserStore, UnlockedFeatures } from "@/lib/user-store";
 import { UpsellPopup } from "@/components/UpsellPopup";
 import { TrialStatusBanner } from "@/components/TrialStatusBanner";
+import { doc, getDoc } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
 
 interface DailyData {
   sunRiseSet?: { sunrise: string; sunset: string };
@@ -27,37 +29,61 @@ export default function DashboardPage() {
     feature: null,
   });
 
-  // Get ascendant sign from store
-  const { ascendantSign } = useOnboardingStore();
+  // Get ascendant sign from onboarding store as fallback
+  const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, ascendantSign: storeAscendantSign } = useOnboardingStore();
   
   // Get unlocked features from user store
   const { unlockedFeatures, birthChartGenerating, birthChartReady } = useUserStore();
 
   useEffect(() => {
-    // Use ascendant sign if available (for personalized zodiac display)
-    if (ascendantSign?.name) {
-      setUserZodiac({
-        sign: ascendantSign.name,
-        symbol: ascendantSign.symbol || getZodiacSymbol(ascendantSign.name),
-        color: getZodiacColor(ascendantSign.name),
-      });
-    } else {
-      // Fall back to stored birth date
-      const storedBirthDate = localStorage.getItem("birthDate");
-      if (storedBirthDate) {
-        const date = new Date(storedBirthDate);
-        const sign = getZodiacSign(date.getMonth() + 1, date.getDate());
+    loadUserZodiac();
+    fetchDailyData();
+  }, []);
+
+  const loadUserZodiac = async () => {
+    try {
+      // Get userId - prefer Firebase Auth uid
+      const authUid = auth.currentUser?.uid;
+      const storedId = localStorage.getItem("palmcosmic_user_id");
+      const userId = authUid || storedId;
+
+      if (userId) {
+        // Load ascendant sign from Firebase
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          // Use ascendant sign for daily horoscope
+          if (data.ascendantSign) {
+            // Handle both object and string formats
+            const signName = typeof data.ascendantSign === "string" 
+              ? data.ascendantSign 
+              : data.ascendantSign.name;
+            if (signName) {
+              setUserZodiac({
+                sign: signName,
+                symbol: getZodiacSymbol(signName),
+                color: getZodiacColor(signName),
+              });
+              return;
+            }
+          }
+        }
+      }
+
+      // Fallback to onboarding store ascendant sign
+      if (storeAscendantSign?.name) {
         setUserZodiac({
-          sign,
-          symbol: getZodiacSymbol(sign),
-          color: getZodiacColor(sign),
+          sign: storeAscendantSign.name,
+          symbol: getZodiacSymbol(storeAscendantSign.name),
+          color: getZodiacColor(storeAscendantSign.name),
         });
       }
+    } catch (error) {
+      console.error("Error loading user zodiac:", error);
     }
-
-    // Fetch daily astrology data
-    fetchDailyData();
-  }, [ascendantSign]);
+  };
 
   const fetchDailyData = async () => {
     try {
@@ -110,24 +136,37 @@ export default function DashboardPage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-r from-[#1A2235] to-[#1F2A40] rounded-2xl p-4 border border-white/10 cursor-pointer"
+              className="relative bg-gradient-to-br from-purple-600/20 via-pink-500/20 to-purple-600/20 rounded-2xl p-5 border-2 border-purple-500/30 cursor-pointer hover:border-purple-500/50 transition-all overflow-hidden group"
               onClick={() => router.push("/chat")}
             >
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                    <span className="text-white text-xl font-bold">E</span>
+              {/* Animated background effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              
+              {/* Sparkle decorations */}
+              <div className="absolute top-3 right-3 text-yellow-400 animate-pulse">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              
+              <div className="relative flex items-center gap-4">
+                <div className="relative flex-shrink-0">
+                  {/* Pulsing ring */}
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 animate-ping opacity-20" />
+                  <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/50">
+                    <MessageCircle className="w-8 h-8 text-white" />
                   </div>
+                  {/* Online indicator */}
+                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-400 rounded-full border-2 border-[#0A0E1A]" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-white font-semibold text-lg">Elysia</h3>
-                  <p className="text-white/60 text-sm line-clamp-1">
-                    Hello again! It&apos;s great to reconnect with you – I trust your journey towar...
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-white font-bold text-xl mb-1 flex items-center gap-2">
+                    Chat with Elysia
+                    <span className="text-xs font-normal px-2 py-0.5 bg-purple-500/30 text-purple-300 rounded-full">AI</span>
+                  </h3>
+                  <p className="text-purple-200/80 text-sm">
+                    Your personal cosmic guide & advisor
                   </p>
                 </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-white/40 text-xs">20:22</span>
-                </div>
+                <ChevronRight className="w-6 h-6 text-purple-300 group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
             
@@ -253,6 +292,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-white font-semibold">Palm Reading Report</h3>
+                      <p className="text-white/50 text-xs mt-0.5">Discover your life path & destiny</p>
                     </div>
                     <ChevronRight className="w-6 h-6 text-white/40" />
                   </div>
@@ -280,6 +320,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-white font-semibold">Prediction 2026 Report</h3>
+                      <p className="text-white/50 text-xs mt-0.5">What the stars hold for your future</p>
                       {!unlockedFeatures.prediction2026 && (
                         <button className="mt-1 px-3 py-1 bg-primary/20 text-primary text-xs rounded-full">
                           Get Report
@@ -319,6 +360,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-white font-semibold">Birth Chart Report</h3>
+                      <p className="text-white/50 text-xs mt-0.5">Your complete astrological blueprint</p>
                       {!unlockedFeatures.birthChart && (
                         <button className="mt-1 px-3 py-1 bg-primary/20 text-primary text-xs rounded-full">
                           Get Report
@@ -354,6 +396,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-white font-semibold">Compatibility Test</h3>
+                      <p className="text-white/50 text-xs mt-0.5">Find your perfect cosmic match</p>
                       {!unlockedFeatures.compatibilityTest && (
                         <button className="mt-1 px-3 py-1 bg-primary/20 text-primary text-xs rounded-full">
                           Get Report

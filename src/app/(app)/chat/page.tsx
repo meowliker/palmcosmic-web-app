@@ -29,9 +29,9 @@ interface StoredMessage {
 }
 
 const suggestedQuestions = [
-  "How can I improve my sex life?",
-  "How can I embody my archetype more fully?",
-  "What are my greatest strengths?",
+  "What does my palm say about my future?",
+  "What are my career prospects this year?",
+  "How can I improve my relationships?",
 ];
 
 const coinPackages = [
@@ -498,8 +498,7 @@ export default function ChatPage() {
       {/* Suggested Questions */}
       <div className="px-4 pb-4">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-white font-medium text-sm">People usually ask:</span>
-          <button className="text-teal-400 text-sm hover:underline">View all</button>
+          <span className="text-white font-medium text-sm">People usually ask</span>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {suggestedQuestions.map((question, index) => (
@@ -517,9 +516,7 @@ export default function ChatPage() {
       {/* Input */}
       <div className="px-4 pb-6">
         <div className="flex gap-2 items-center">
-          <button className="w-10 h-10 rounded-full bg-[#1A1F2E] flex items-center justify-center hover:bg-[#252A3A] transition-colors">
-            <HelpCircle className="w-5 h-5 text-white/60" />
-          </button>
+          
           <input
             type="text"
             value={input}

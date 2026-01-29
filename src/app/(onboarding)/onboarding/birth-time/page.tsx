@@ -7,6 +7,7 @@ import { useOnboardingStore } from "@/lib/onboarding-store";
 import { OnboardingHeader, ProgressBar } from "@/components/onboarding/OnboardingHeader";
 import { WheelPicker } from "@/components/onboarding/WheelPicker";
 import { Button } from "@/components/ui/button";
+import { useHaptic } from "@/hooks/useHaptic";
 
 const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
 const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
@@ -15,8 +16,10 @@ const periods: ("AM" | "PM")[] = ["AM", "PM"];
 export default function BirthTimePage() {
   const router = useRouter();
   const { birthHour, birthMinute, birthPeriod, setBirthTime, setKnowsBirthTime } = useOnboardingStore();
-
+  const { triggerLight } = useHaptic();
+  
   const handleContinue = () => {
+    triggerLight();
     router.push("/onboarding/birthplace");
   };
 
@@ -68,7 +71,7 @@ export default function BirthTimePage() {
         </div>
       </div>
 
-      <div className="p-6 space-y-3">
+      <div className="px-6 pb-24 space-y-3">
         <button
           onClick={handleDontRemember}
           className="w-full text-primary hover:text-primary/80 text-sm font-medium transition-colors"

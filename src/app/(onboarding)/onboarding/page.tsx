@@ -9,6 +9,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
 import { OnboardingSidebar } from "@/components/OnboardingSidebar";
+import { pixelEvents } from "@/lib/pixel-events";
 
 const genderOptions: { value: Gender; label: string; icon: string }[] = [
   { value: "female", label: "Female", icon: "♀" },
@@ -23,6 +24,7 @@ export default function OnboardingPage() {
 
   const handleGenderSelect = (selectedGender: Gender) => {
     setGender(selectedGender);
+    pixelEvents.lead(); // Track lead when user starts onboarding
     router.push("/onboarding/birthday");
   };
 

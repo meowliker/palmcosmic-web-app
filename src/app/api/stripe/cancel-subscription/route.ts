@@ -6,18 +6,31 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, subscriptionId } = await request.json();
+    const { userId, subscriptionId, email } = await request.json();
 
     let resolvedSubscriptionId: string | null = subscriptionId || null;
-
     let resolvedCustomerId: string | null = null;
+    let userEmail: string | null = email || null;
 
     if (!resolvedSubscriptionId && userId) {
       const adminDb = getAdminDb();
       const snap = await adminDb.collection("users").doc(userId).get();
       if (snap.exists) {
-        resolvedSubscriptionId = ((snap.data() as any)?.stripeSubscriptionId as string) || null;
-        resolvedCustomerId = ((snap.data() as any)?.stripeCustomerId as string) || null;
+        const data = snap.data() as any;
+        resolvedSubscriptionId = data?.stripeSubscriptionId || null;
+        resolvedCustomerId = data?.stripeCustomerId || null;
+        if (!userEmail) userEmail = data?.email || null;
+      }
+    }
+
+    // If no customer ID, try to find customer by email
+    if (!resolvedSubscriptionId && !resolvedCustomerId && userEmail) {
+      const customers = await stripe.customers.list({
+        email: userEmail.toLowerCase(),
+        limit: 1,
+      });
+      if (customers.data.length > 0) {
+        resolvedCustomerId = customers.data[0].id;
       }
     }
 
