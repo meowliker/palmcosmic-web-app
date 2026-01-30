@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type SubscriptionPlan = "weekly" | "monthly" | "yearly" | null;
+export type SubscriptionPlan = "1week" | "2week" | "4week" | "weekly" | "monthly" | "yearly" | null;
 
 export interface UnlockedFeatures {
   palmReading: boolean;

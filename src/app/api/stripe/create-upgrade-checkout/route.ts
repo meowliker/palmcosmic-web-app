@@ -3,10 +3,19 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
+// Price IDs for subscription plans
 const PRICE_IDS: Record<string, string> = {
+  // New manage subscription plans
+  "2week-plan": process.env.STRIPE_PRICE_2WEEK_PLAN!,  // $19.99 every 2 weeks
+  "monthly-plan": process.env.STRIPE_PRICE_MONTHLY_PLAN!, // $29.99 monthly
+  // Legacy plans (for backward compatibility)
   weekly: process.env.STRIPE_PRICE_WEEKLY!,
   monthly: process.env.STRIPE_PRICE_MONTHLY!,
   yearly: process.env.STRIPE_PRICE_YEARLY!,
+  // Trial plan mappings (if user somehow tries to upgrade to these)
+  "1week": process.env.STRIPE_PRICE_2WEEK_PLAN!,
+  "2week": process.env.STRIPE_PRICE_2WEEK_PLAN!,
+  "4week": process.env.STRIPE_PRICE_MONTHLY_PLAN!,
 };
 
 // Upgrade checkout - NO trial period (user already has a subscription)
@@ -20,6 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     const priceId = PRICE_IDS[plan];
+    
     if (!plan || !priceId) {
       return NextResponse.json(
         { error: `Price ID not configured for plan: ${plan}` },

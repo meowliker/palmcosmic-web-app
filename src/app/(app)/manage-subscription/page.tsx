@@ -3,35 +3,39 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Crown, Loader2, AlertTriangle, Calendar } from "lucide-react";
+import { ArrowLeft, Check, Crown, Loader2, AlertTriangle, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserStore } from "@/lib/user-store";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
+// Only 2 plans available for manage subscription
 const subscriptionPlans = [
   {
-    id: "weekly",
-    name: "Weekly",
-    price: "$4.99",
-    period: "/week",
-  },
-  {
-    id: "monthly",
-    name: "Monthly",
-    price: "$9.99",
-    period: "/month",
+    id: "2week-plan",
+    name: "2-Week Plan",
+    price: "$19.99",
+    period: "/2 weeks",
     popular: true,
   },
   {
-    id: "yearly",
-    name: "Yearly",
-    price: "$39.99",
-    period: "/year",
-    description: "Best value - Save 67%",
+    id: "monthly-plan",
+    name: "Monthly Plan",
+    price: "$29.99",
+    period: "/month",
     bestValue: true,
   },
 ];
+
+// Map trial plans to their corresponding recurring plans
+const trialToRecurringPlan: Record<string, string> = {
+  "1week": "2week-plan",
+  "2week": "2week-plan",
+  "4week": "monthly-plan",
+  "weekly": "2week-plan",
+  "monthly": "monthly-plan",
+  "yearly": "monthly-plan",
+};
 
 export default function ManageSubscriptionPage() {
   const router = useRouter();
@@ -45,18 +49,41 @@ export default function ManageSubscriptionPage() {
     isCancelled: boolean;
     cycleEndDate: string | null;
     stripeSubscriptionId: string | null;
+    isTrialing: boolean;
+    trialEndsAt: string | null;
+    rawPlan: string | null;
   }>({
     isCancelled: false,
     cycleEndDate: null,
     stripeSubscriptionId: null,
+    isTrialing: false,
+    trialEndsAt: null,
+    rawPlan: null,
   });
 
   const { subscriptionPlan, setSubscriptionPlan } = useUserStore();
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
 
-  const normalizePlan = (plan: any): "weekly" | "monthly" | "yearly" | null => {
+  // Normalize raw plan to display plan (maps trial plans to recurring)
+  const normalizeToDisplayPlan = (plan: any): string | null => {
     if (!plan) return null;
     const p = String(plan).toLowerCase().trim();
+    // Map trial plans to their recurring equivalents
+    if (trialToRecurringPlan[p]) return trialToRecurringPlan[p];
+    // Direct plan matches
+    if (p === "2week-plan") return "2week-plan";
+    if (p === "monthly-plan") return "monthly-plan";
+    return null;
+  };
+
+  const normalizePlan = (plan: any): "1week" | "2week" | "4week" | "weekly" | "monthly" | "yearly" | null => {
+    if (!plan) return null;
+    const p = String(plan).toLowerCase().trim();
+    // New trial plans
+    if (p === "1week") return "1week";
+    if (p === "2week") return "2week";
+    if (p === "4week") return "4week";
+    // Legacy plans
     if (p === "weekly" || p.includes("week")) return "weekly";
     if (p === "monthly" || p.includes("month")) return "monthly";
     if (p === "yearly" || p.includes("year") || p.includes("annual")) return "yearly";
@@ -96,14 +123,25 @@ export default function ManageSubscriptionPage() {
       const userDoc = await getDoc(doc(db, "users", userId));
       if (userDoc.exists()) {
         const data = userDoc.data();
+        const rawPlan = (data as any).subscriptionPlan || null;
+        const isTrialing = data.subscriptionStatus === "trialing";
+        const trialEndsAt = data.trialEndsAt || null;
+        
         setSubscriptionStatus({
           isCancelled: data.subscriptionCancelled || false,
-          cycleEndDate: data.subscriptionEndDate || null,
+          cycleEndDate: data.subscriptionEndDate || data.currentPeriodEnd || null,
           stripeSubscriptionId: data.stripeSubscriptionId || null,
+          isTrialing,
+          trialEndsAt,
+          rawPlan,
         });
-        // Also get the subscription plan from Firebase
-        const normalized = normalizePlan((data as any).subscriptionPlan);
-        setCurrentPlan(normalized);
+        
+        // Map to display plan (trial plans -> recurring plans)
+        const displayPlan = normalizeToDisplayPlan(rawPlan);
+        setCurrentPlan(displayPlan);
+        
+        // Also update store with normalized plan
+        const normalized = normalizePlan(rawPlan);
         setSubscriptionPlan(normalized);
 
         if (!normalized && (data as any).stripeSubscriptionId) {
@@ -132,7 +170,27 @@ export default function ManageSubscriptionPage() {
     }
   };
 
-  const activePlan = currentPlan || normalizePlan(subscriptionPlan);
+  // Get the display plan (mapped from trial to recurring)
+  const activePlan = currentPlan || normalizeToDisplayPlan(subscriptionPlan);
+
+  // Calculate trial days remaining
+  const getTrialDaysRemaining = () => {
+    if (!subscriptionStatus.isTrialing || !subscriptionStatus.trialEndsAt) return 0;
+    const now = new Date();
+    const trialEnd = new Date(subscriptionStatus.trialEndsAt);
+    const diffTime = trialEnd.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
+  };
+
+  const trialDaysRemaining = getTrialDaysRemaining();
+
+  // Get the charge amount after trial based on raw plan
+  const getAfterTrialCharge = () => {
+    const rawPlan = subscriptionStatus.rawPlan;
+    if (rawPlan === "4week") return "$29.99/month";
+    return "$19.99/2 weeks";
+  };
 
   const handleUpgrade = async (planId: string) => {
     if (planId === activePlan) return; // Already on this plan
@@ -177,7 +235,8 @@ export default function ManageSubscriptionPage() {
   const getPlanStatus = (planId: string) => {
     if (planId === activePlan) return "current";
     
-    const planOrder = ["weekly", "monthly", "yearly"];
+    // Plan order for upgrade/downgrade logic
+    const planOrder = ["2week-plan", "monthly-plan"];
     const currentIndex = planOrder.indexOf(activePlan || "");
     const planIndex = planOrder.indexOf(planId);
     
@@ -308,7 +367,36 @@ export default function ManageSubscriptionPage() {
                   </div>
                   <div>
                     <p className="text-white/60 text-sm">Current Plan</p>
-                    <p className="text-primary text-lg font-bold capitalize">{activePlan}</p>
+                    <p className="text-primary text-lg font-bold">
+                      {activePlan === "2week-plan" ? "2-Week Plan" : "Monthly Plan"}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Trial Status Banner - Only show if actively trialing */}
+            {subscriptionStatus.isTrialing && trialDaysRemaining > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-2xl p-4 border border-blue-500/30"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-blue-400 font-semibold text-base">
+                      {trialDaysRemaining} {trialDaysRemaining === 1 ? "day" : "days"} left for your trial to end
+                    </p>
+                    <p className="text-white/50 text-sm mt-1">
+                      Trial ends on {formatDate(subscriptionStatus.trialEndsAt)}
+                    </p>
+                    <p className="text-white/70 text-sm mt-2">
+                      After trial, you will be charged <span className="text-blue-400 font-medium">{getAfterTrialCharge()}</span>
+                    </p>
                   </div>
                 </div>
               </motion.div>
@@ -370,7 +458,6 @@ export default function ManageSubscriptionPage() {
                     <div className="flex items-center justify-between mt-2">
                       <div>
                         <h3 className="text-white font-semibold text-lg">{plan.name}</h3>
-                        {plan.description && <p className="text-white/50 text-sm">{plan.description}</p>}
                       </div>
                       <div className="text-right">
                         <p className="text-white text-2xl font-bold">{plan.price}</p>
