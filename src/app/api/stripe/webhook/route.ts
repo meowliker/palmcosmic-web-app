@@ -63,8 +63,32 @@ export async function POST(request: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const { userId, plan, type, offers, coins, feature } = session.metadata || {};
-        const resolvedUserId = (userId || "").trim();
+        let resolvedUserId = (userId || "").trim();
         const now = new Date().toISOString();
+        const customerEmail = (session.customer_details?.email || session.customer_email || "").toLowerCase().trim();
+
+        console.log("Checkout completed - userId:", resolvedUserId, "email:", customerEmail, "plan:", plan);
+
+        // If userId is missing, try to find user by email
+        if (!resolvedUserId && customerEmail) {
+          console.log("userId missing, attempting email lookup for:", customerEmail);
+          try {
+            const userQuery = await adminDb
+              .collection("users")
+              .where("email", "==", customerEmail)
+              .limit(1)
+              .get();
+            
+            if (!userQuery.empty) {
+              resolvedUserId = userQuery.docs[0].id;
+              console.log("Found user by email lookup:", resolvedUserId);
+            } else {
+              console.log("No user found with email:", customerEmail);
+            }
+          } catch (emailLookupErr) {
+            console.error("Email lookup failed:", emailLookupErr);
+          }
+        }
 
         // Always store payment record (even if userId missing)
         try {
@@ -78,7 +102,7 @@ export async function POST(request: NextRequest) {
             offers: offers || null,
             feature: feature || null,
             coins: coins || null,
-            customerEmail: session.customer_details?.email || session.customer_email || null,
+            customerEmail: customerEmail || null,
             amountTotal: session.amount_total ?? null,
             currency: session.currency || null,
             paymentStatus: session.payment_status || null,
@@ -99,7 +123,10 @@ export async function POST(request: NextRequest) {
           console.error("Failed to persist payment record:", err);
         }
 
-        if (!resolvedUserId) break;
+        if (!resolvedUserId) {
+          console.log("No userId found even after email lookup, skipping user updates");
+          break;
+        }
 
         const userRef = adminDb.collection("users").doc(resolvedUserId);
 
@@ -181,9 +208,30 @@ export async function POST(request: NextRequest) {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const subData = subscription as any;
-        const { userId } = subData.metadata || {};
+        let { userId } = subData.metadata || {};
         
         console.log("Subscription updated:", subscription.id, subData.status);
+        
+        // If userId is missing, try to find by customer email
+        if (!userId && subscription.customer) {
+          try {
+            const customer = await stripe.customers.retrieve(subscription.customer as string);
+            if (customer && !customer.deleted && (customer as any).email) {
+              const email = (customer as any).email.toLowerCase();
+              const userQuery = await adminDb
+                .collection("users")
+                .where("email", "==", email)
+                .limit(1)
+                .get();
+              if (!userQuery.empty) {
+                userId = userQuery.docs[0].id;
+                console.log("Found user by email for subscription update:", userId);
+              }
+            }
+          } catch (lookupErr) {
+            console.error("Email lookup failed for subscription update:", lookupErr);
+          }
+        }
         
         // Check if trial has ended
         if (subData.trial_end && new Date(subData.trial_end * 1000) <= new Date()) {
@@ -229,9 +277,30 @@ export async function POST(request: NextRequest) {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const subData = subscription as any;
-        const { userId } = subData.metadata || {};
+        let { userId } = subData.metadata || {};
         
         console.log(`Subscription cancelled for user ${userId}`);
+        
+        // If userId is missing, try to find by customer email
+        if (!userId && subscription.customer) {
+          try {
+            const customer = await stripe.customers.retrieve(subscription.customer as string);
+            if (customer && !customer.deleted && (customer as any).email) {
+              const email = (customer as any).email.toLowerCase();
+              const userQuery = await adminDb
+                .collection("users")
+                .where("email", "==", email)
+                .limit(1)
+                .get();
+              if (!userQuery.empty) {
+                userId = userQuery.docs[0].id;
+                console.log("Found user by email for subscription deleted:", userId);
+              }
+            }
+          } catch (lookupErr) {
+            console.error("Email lookup failed for subscription deleted:", lookupErr);
+          }
+        }
         
         if (userId) {
           const now = new Date().toISOString();
@@ -257,9 +326,30 @@ export async function POST(request: NextRequest) {
         // Trial is about to end (3 days before by default)
         const subscription = event.data.object as Stripe.Subscription;
         const subData = subscription as any;
-        const { userId } = subData.metadata || {};
+        let { userId } = subData.metadata || {};
         
         console.log(`Trial ending soon for user ${userId}`);
+        
+        // If userId is missing, try to find by customer email
+        if (!userId && subscription.customer) {
+          try {
+            const customer = await stripe.customers.retrieve(subscription.customer as string);
+            if (customer && !customer.deleted && (customer as any).email) {
+              const email = (customer as any).email.toLowerCase();
+              const userQuery = await adminDb
+                .collection("users")
+                .where("email", "==", email)
+                .limit(1)
+                .get();
+              if (!userQuery.empty) {
+                userId = userQuery.docs[0].id;
+                console.log("Found user by email for trial_will_end:", userId);
+              }
+            }
+          } catch (lookupErr) {
+            console.error("Email lookup failed for trial_will_end:", lookupErr);
+          }
+        }
         
         if (userId) {
           const now = new Date().toISOString();
@@ -281,9 +371,27 @@ export async function POST(request: NextRequest) {
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
         const invoiceData = invoice as any;
-        const { userId } = invoiceData.subscription_details?.metadata || {};
+        let { userId } = invoiceData.subscription_details?.metadata || {};
         
         console.log("Payment succeeded for invoice:", invoice.id);
+        
+        // If userId is missing, try to find by customer email
+        if (!userId && invoice.customer_email) {
+          try {
+            const email = invoice.customer_email.toLowerCase();
+            const userQuery = await adminDb
+              .collection("users")
+              .where("email", "==", email)
+              .limit(1)
+              .get();
+            if (!userQuery.empty) {
+              userId = userQuery.docs[0].id;
+              console.log("Found user by email for payment_succeeded:", userId);
+            }
+          } catch (lookupErr) {
+            console.error("Email lookup failed for payment_succeeded:", lookupErr);
+          }
+        }
         
         if (userId) {
           const now = new Date().toISOString();
@@ -306,9 +414,27 @@ export async function POST(request: NextRequest) {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
         const invoiceData = invoice as any;
-        const { userId } = invoiceData.subscription_details?.metadata || {};
+        let { userId } = invoiceData.subscription_details?.metadata || {};
         
         console.log("Payment failed for invoice:", invoice.id);
+        
+        // If userId is missing, try to find by customer email
+        if (!userId && invoice.customer_email) {
+          try {
+            const email = invoice.customer_email.toLowerCase();
+            const userQuery = await adminDb
+              .collection("users")
+              .where("email", "==", email)
+              .limit(1)
+              .get();
+            if (!userQuery.empty) {
+              userId = userQuery.docs[0].id;
+              console.log("Found user by email for payment_failed:", userId);
+            }
+          } catch (lookupErr) {
+            console.error("Email lookup failed for payment_failed:", lookupErr);
+          }
+        }
         
         if (userId) {
           const now = new Date().toISOString();
