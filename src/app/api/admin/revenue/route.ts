@@ -83,15 +83,19 @@ export async function GET(request: NextRequest) {
       })
       .reduce((sum, p) => sum + getAmount(p), 0);
     
-    // MRR calculation (active subscriptions)
+    // MRR calculation (active subscriptions including trialing)
     const activeSubscribers = users.filter(u => 
-      u.subscriptionStatus === "active" && !u.subscriptionCancelled
+      (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled
     );
     
     const mrr = activeSubscribers.reduce((sum, u) => {
+      // Legacy plans
       if (u.subscriptionPlan === "weekly") return sum + (4.99 * 4); // Weekly to monthly
       if (u.subscriptionPlan === "monthly") return sum + 9.99;
       if (u.subscriptionPlan === "yearly") return sum + (49.99 / 12);
+      // New trial plans (after trial, they pay recurring)
+      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * 2); // 2-week plan to monthly
+      if (u.subscriptionPlan === "4week") return sum + 29.99; // Monthly plan
       return sum;
     }, 0);
     
@@ -102,16 +106,19 @@ export async function GET(request: NextRequest) {
       ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth * 100).toFixed(1)
       : "N/A";
     
-    // Revenue by plan tier
+    // Revenue by plan tier (including new trial plans)
     const revenueByPlan = {
       weekly: payments.filter(p => p.plan === "weekly").reduce((sum, p) => sum + getAmount(p), 0),
       monthly: payments.filter(p => p.plan === "monthly").reduce((sum, p) => sum + getAmount(p), 0),
       yearly: payments.filter(p => p.plan === "yearly").reduce((sum, p) => sum + getAmount(p), 0),
+      "1week": payments.filter(p => p.plan === "1week").reduce((sum, p) => sum + getAmount(p), 0),
+      "2week": payments.filter(p => p.plan === "2week").reduce((sum, p) => sum + getAmount(p), 0),
+      "4week": payments.filter(p => p.plan === "4week").reduce((sum, p) => sum + getAmount(p), 0),
     };
     
-    // Revenue by type
+    // Revenue by type (trial_subscription counts as subscription)
     const revenueByType = {
-      subscription: payments.filter(p => p.type === "subscription" || !p.type).reduce((sum, p) => sum + getAmount(p), 0),
+      subscription: payments.filter(p => p.type === "subscription" || p.type === "trial_subscription" || !p.type).reduce((sum, p) => sum + getAmount(p), 0),
       coins: payments.filter(p => p.type === "coins").reduce((sum, p) => sum + getAmount(p), 0),
       reports: payments.filter(p => p.type === "report").reduce((sum, p) => sum + getAmount(p), 0),
       upsells: payments.filter(p => p.type === "upsell").reduce((sum, p) => sum + getAmount(p), 0),
@@ -121,7 +128,7 @@ export async function GET(request: NextRequest) {
     const totalActiveSubscribers = activeSubscribers.length;
     const newSubscribersThisMonth = users.filter(u => {
       const startedAt = u.subscriptionStartedAt ? new Date(u.subscriptionStartedAt) : null;
-      return startedAt && startedAt >= startOfMonth && u.subscriptionStatus === "active";
+      return startedAt && startedAt >= startOfMonth && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing");
     }).length;
     
     const churnedSubscribers = users.filter(u => u.subscriptionCancelled === true).length;

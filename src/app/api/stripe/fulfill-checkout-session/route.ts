@@ -24,8 +24,10 @@ function offersToUnlockedFeatures(offers: string[]) {
 }
 
 function getPlanCoins(plan?: string | null) {
-  if (plan === "weekly" || plan === "monthly") return 15;
-  if (plan === "yearly") return 30;
+  // 1-week and 2-week trials give 15 coins each
+  if (plan === "weekly" || plan === "monthly" || plan === "1week" || plan === "2week") return 15;
+  // 4-week trial (monthly) gives 30 coins
+  if (plan === "yearly" || plan === "4week") return 30;
   return 0;
 }
 
@@ -108,25 +110,36 @@ export async function POST(request: NextRequest) {
         .map((s) => s.trim())
         .filter(Boolean);
       const unlockUpdates = offersToUnlockedFeatures(offerList);
-      await userRef.set(
-        {
-          unlockedFeatures: unlockUpdates,
-          updatedAt: now,
-        },
-        { merge: true }
-      );
+      
+      const updateData: any = {
+        unlockedFeatures: unlockUpdates,
+        updatedAt: now,
+      };
+      
+      // Start 24-hour timer if birth chart is included in upsell
+      if (unlockUpdates.birthChart) {
+        updateData.birthChartTimerActive = true;
+        updateData.birthChartTimerStartedAt = now;
+      }
+      
+      await userRef.set(updateData, { merge: true });
     } else if (type === "report") {
       const feature = String(meta.feature || "").trim();
       if (feature) {
-        await userRef.set(
-          {
-            unlockedFeatures: {
-              [feature]: true,
-            },
-            updatedAt: now,
+        const updateData: any = {
+          unlockedFeatures: {
+            [feature]: true,
           },
-          { merge: true }
-        );
+          updatedAt: now,
+        };
+        
+        // Start 24-hour timer for birth chart
+        if (feature === "birthChart") {
+          updateData.birthChartTimerActive = true;
+          updateData.birthChartTimerStartedAt = now;
+        }
+        
+        await userRef.set(updateData, { merge: true });
       }
     } else if (type === "coins") {
       const coinsToAdd = parseInt(String(meta.coins || "0"), 10) || 0;

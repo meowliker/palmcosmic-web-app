@@ -9,8 +9,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 function getPlanCoins(plan?: string | null) {
-  if (plan === "weekly" || plan === "monthly") return 15;
-  if (plan === "yearly") return 30;
+  // 1-week and 2-week trials give 15 coins each
+  if (plan === "weekly" || plan === "monthly" || plan === "1week" || plan === "2week") return 15;
+  // 4-week trial (monthly) gives 30 coins
+  if (plan === "yearly" || plan === "4week") return 30;
   return 0;
 }
 
@@ -182,6 +184,123 @@ export async function POST(request: NextRequest) {
             }
             
             await userRef.set(updateData, { merge: true });
+          }
+        } else if (type === "trial_subscription") {
+          // New trial-based subscription: payment was for trial fee
+          // Now create the actual subscription with trial period
+          const { subscriptionPriceId, trialDays } = session.metadata || {};
+          const customerId = typeof session.customer === "string" ? session.customer : null;
+          
+          console.log("Trial subscription payment completed, creating subscription...");
+          console.log("Customer ID:", customerId, "Price ID:", subscriptionPriceId, "Trial Days:", trialDays);
+          
+          // Get the payment method from the payment intent
+          let paymentMethodId: string | null = null;
+          if (session.payment_intent) {
+            try {
+              const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string);
+              paymentMethodId = typeof paymentIntent.payment_method === "string" 
+                ? paymentIntent.payment_method 
+                : null;
+            } catch (pmErr) {
+              console.error("Failed to retrieve payment method:", pmErr);
+            }
+          }
+          
+          if (subscriptionPriceId && customerId && paymentMethodId) {
+            try {
+              // Create the subscription with trial period
+              const subscription = await stripe.subscriptions.create({
+                customer: customerId,
+                items: [{ price: subscriptionPriceId }],
+                trial_period_days: parseInt(trialDays || "7", 10),
+                default_payment_method: paymentMethodId,
+                metadata: {
+                  userId: resolvedUserId,
+                  plan: plan || "",
+                },
+              });
+              
+              console.log("Subscription created:", subscription.id);
+              
+              // Update user with subscription info
+              const coinsToAdd = getPlanCoins(plan || null);
+              await userRef.set(
+                {
+                  subscriptionPlan: plan || null,
+                  subscriptionStatus: "trialing",
+                  subscriptionStartedAt: now,
+                  subscriptionCancelled: false,
+                  stripeSubscriptionId: subscription.id,
+                  stripeCustomerId: customerId,
+                  trialEndsAt: subscription.trial_end 
+                    ? new Date(subscription.trial_end * 1000).toISOString() 
+                    : null,
+                  updatedAt: now,
+                },
+                { merge: true }
+              );
+              
+              if (coinsToAdd > 0) {
+                await userRef.set(
+                  {
+                    coins: FieldValue.increment(coinsToAdd),
+                    updatedAt: now,
+                  },
+                  { merge: true }
+                );
+              }
+              
+              // Update lead document
+              if (customerEmail) {
+                try {
+                  const leadsQuery = await adminDb
+                    .collection("leads")
+                    .where("email", "==", customerEmail)
+                    .orderBy("createdAt", "desc")
+                    .limit(1)
+                    .get();
+                  
+                  if (!leadsQuery.empty) {
+                    await leadsQuery.docs[0].ref.update({
+                      subscriptionStatus: plan || "trialing",
+                      subscribedAt: now,
+                    });
+                  }
+                } catch (leadErr) {
+                  console.error("Failed to update lead subscription status:", leadErr);
+                }
+              }
+            } catch (subErr) {
+              console.error("Failed to create subscription after trial payment:", subErr);
+              // Still mark user as having paid for trial
+              await userRef.set(
+                {
+                  trialPaymentCompleted: true,
+                  trialPaymentPlan: plan || null,
+                  subscriptionPriceId: subscriptionPriceId,
+                  stripeCustomerId: customerId,
+                  updatedAt: now,
+                },
+                { merge: true }
+              );
+            }
+          } else {
+            console.log("Missing required data for subscription creation:", {
+              hasSubscriptionPriceId: !!subscriptionPriceId,
+              hasCustomerId: !!customerId,
+              hasPaymentMethodId: !!paymentMethodId,
+            });
+            // Mark trial payment as completed for manual follow-up
+            await userRef.set(
+              {
+                trialPaymentCompleted: true,
+                trialPaymentPlan: plan || null,
+                stripeCustomerId: customerId,
+                updatedAt: now,
+              },
+              { merge: true }
+            );
           }
         } else {
           const coinsToAdd = getPlanCoins(plan || null);
