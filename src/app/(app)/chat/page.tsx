@@ -220,11 +220,16 @@ export default function ChatPage() {
 
   // Save chat messages to Firebase whenever they change
   useEffect(() => {
-    if (!chatLoaded || messages.length === 0 || !currentUserId) return;
+    // Only save if we have loaded chat, have a userId, and user has sent at least one message
+    const hasUserMessage = messages.some(m => m.role === "user");
+    if (!chatLoaded || messages.length === 0 || !currentUserId || !hasUserMessage) {
+      console.log("[Chat] Skip save - chatLoaded:", chatLoaded, "messages:", messages.length, "userId:", currentUserId, "hasUserMessage:", hasUserMessage);
+      return;
+    }
 
     const saveChat = async () => {
       try {
-        console.log("[Chat] Saving chat for userId:", currentUserId);
+        console.log("[Chat] Saving chat for userId:", currentUserId, "messages count:", messages.length);
         const storedMessages: StoredMessage[] = messages.map((m) => ({
           role: m.role,
           content: m.content,
@@ -232,18 +237,23 @@ export default function ChatPage() {
           palmImage: m.palmImage,
           traits: m.traits,
         }));
-        await setDoc(doc(db, "chat_messages", currentUserId), {
+        
+        const chatRef = doc(db, "chat_messages", currentUserId);
+        await setDoc(chatRef, {
           messages: storedMessages,
           updatedAt: new Date().toISOString(),
+          userId: currentUserId,
         });
-        console.log("[Chat] Chat saved successfully");
-      } catch (err) {
+        console.log("[Chat] Chat saved successfully to:", `chat_messages/${currentUserId}`);
+      } catch (err: any) {
         console.error("[Chat] Failed to save chat:", err);
+        console.error("[Chat] Error code:", err?.code);
+        console.error("[Chat] Error message:", err?.message);
       }
     };
 
     // Debounce save to avoid too many writes
-    const timeoutId = setTimeout(saveChat, 1000);
+    const timeoutId = setTimeout(saveChat, 500);
     return () => clearTimeout(timeoutId);
   }, [messages, chatLoaded, currentUserId]);
 
