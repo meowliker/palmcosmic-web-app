@@ -80,6 +80,7 @@ export default function ChatPage() {
   const [palmReading, setPalmReading] = useState<any>(null);
   const [chatLoaded, setChatLoaded] = useState(false);
   const [showLowBalanceBubble, setShowLowBalanceBubble] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Get coins from user store
   const { coins, deductCoins } = useUserStore();
@@ -155,6 +156,8 @@ export default function ChatPage() {
 
     const loadData = async () => {
       const userId = generateUserId();
+      setCurrentUserId(userId);
+      console.log("[Chat] Loading data for userId:", userId);
 
       // Load palm reading from Firebase
       try {
@@ -165,14 +168,17 @@ export default function ChatPage() {
           if (data.palmImageUrl) setPalmImage(data.palmImageUrl);
         }
       } catch (err) {
-        console.error("Failed to load palm reading:", err);
+        console.error("[Chat] Failed to load palm reading:", err);
       }
 
       // Load chat history from Firebase
       try {
+        console.log("[Chat] Attempting to load chat from:", `chat_messages/${userId}`);
         const chatDocSnap = await getDoc(doc(db, "chat_messages", userId));
+        console.log("[Chat] Chat doc exists:", chatDocSnap.exists());
         if (chatDocSnap.exists()) {
           const data = chatDocSnap.data();
+          console.log("[Chat] Loaded chat data:", data);
           if (data.messages && data.messages.length > 0) {
             const loadedMessages: Message[] = data.messages.map((m: StoredMessage) => ({
               ...m,
@@ -184,7 +190,7 @@ export default function ChatPage() {
           }
         }
       } catch (err) {
-        console.error("Failed to load chat history:", err);
+        console.error("[Chat] Failed to load chat history:", err);
       }
 
       // No saved chat - show welcome message
@@ -214,11 +220,11 @@ export default function ChatPage() {
 
   // Save chat messages to Firebase whenever they change
   useEffect(() => {
-    if (!chatLoaded || messages.length === 0) return;
+    if (!chatLoaded || messages.length === 0 || !currentUserId) return;
 
     const saveChat = async () => {
       try {
-        const userId = generateUserId();
+        console.log("[Chat] Saving chat for userId:", currentUserId);
         const storedMessages: StoredMessage[] = messages.map((m) => ({
           role: m.role,
           content: m.content,
@@ -226,17 +232,20 @@ export default function ChatPage() {
           palmImage: m.palmImage,
           traits: m.traits,
         }));
-        await setDoc(doc(db, "chat_messages", userId), {
+        await setDoc(doc(db, "chat_messages", currentUserId), {
           messages: storedMessages,
           updatedAt: new Date().toISOString(),
         });
+        console.log("[Chat] Chat saved successfully");
       } catch (err) {
-        console.error("Failed to save chat:", err);
+        console.error("[Chat] Failed to save chat:", err);
       }
     };
 
-    saveChat();
-  }, [messages, chatLoaded]);
+    // Debounce save to avoid too many writes
+    const timeoutId = setTimeout(saveChat, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [messages, chatLoaded, currentUserId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
