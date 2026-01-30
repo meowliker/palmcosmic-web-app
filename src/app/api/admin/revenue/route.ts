@@ -5,18 +5,25 @@ export async function GET(request: NextRequest) {
   try {
     const adminDb = getAdminDb();
     
-    // Get userId from query params for admin check
+    // Get session token from query params for admin check
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const token = searchParams.get("token");
     
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized - No token provided" }, { status: 401 });
     }
     
-    // Check if user is admin
-    const userDoc = await adminDb.collection("users").doc(userId).get();
-    if (!userDoc.exists || !userDoc.data()?.isAdmin) {
-      return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 403 });
+    // Verify admin session token
+    const sessionDoc = await adminDb.collection("admin_sessions").doc(token).get();
+    if (!sessionDoc.exists) {
+      return NextResponse.json({ error: "Unauthorized - Invalid session" }, { status: 401 });
+    }
+    
+    const sessionData = sessionDoc.data();
+    if (new Date(sessionData?.expiresAt) < new Date()) {
+      // Session expired, delete it
+      await adminDb.collection("admin_sessions").doc(token).delete();
+      return NextResponse.json({ error: "Session expired - Please login again" }, { status: 401 });
     }
     
     const now = new Date();
@@ -42,32 +49,39 @@ export async function GET(request: NextRequest) {
       users.push({ id: doc.id, ...doc.data() });
     });
     
+    // Helper to get payment amount (amountTotal is in cents from Stripe)
+    const getAmount = (p: any) => {
+      const amt = p.amountTotal || p.amount || 0;
+      // If amount is in cents (> 100), convert to dollars
+      return amt > 100 ? amt / 100 : amt;
+    };
+    
     // Calculate metrics
-    const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalRevenue = payments.reduce((sum, p) => sum + getAmount(p), 0);
     
     // Revenue by period
     const revenueToday = payments
       .filter(p => new Date(p.createdAt) >= startOfToday)
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+      .reduce((sum, p) => sum + getAmount(p), 0);
     
     const revenueThisWeek = payments
       .filter(p => new Date(p.createdAt) >= startOfWeek)
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+      .reduce((sum, p) => sum + getAmount(p), 0);
     
     const revenueThisMonth = payments
       .filter(p => new Date(p.createdAt) >= startOfMonth)
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+      .reduce((sum, p) => sum + getAmount(p), 0);
     
     const revenueThisYear = payments
       .filter(p => new Date(p.createdAt) >= startOfYear)
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+      .reduce((sum, p) => sum + getAmount(p), 0);
     
     const revenueLastMonth = payments
       .filter(p => {
         const date = new Date(p.createdAt);
         return date >= startOfLastMonth && date <= endOfLastMonth;
       })
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+      .reduce((sum, p) => sum + getAmount(p), 0);
     
     // MRR calculation (active subscriptions)
     const activeSubscribers = users.filter(u => 
@@ -90,17 +104,17 @@ export async function GET(request: NextRequest) {
     
     // Revenue by plan tier
     const revenueByPlan = {
-      weekly: payments.filter(p => p.plan === "weekly").reduce((sum, p) => sum + (p.amount || 0), 0),
-      monthly: payments.filter(p => p.plan === "monthly").reduce((sum, p) => sum + (p.amount || 0), 0),
-      yearly: payments.filter(p => p.plan === "yearly").reduce((sum, p) => sum + (p.amount || 0), 0),
+      weekly: payments.filter(p => p.plan === "weekly").reduce((sum, p) => sum + getAmount(p), 0),
+      monthly: payments.filter(p => p.plan === "monthly").reduce((sum, p) => sum + getAmount(p), 0),
+      yearly: payments.filter(p => p.plan === "yearly").reduce((sum, p) => sum + getAmount(p), 0),
     };
     
     // Revenue by type
     const revenueByType = {
-      subscription: payments.filter(p => p.type === "subscription" || !p.type).reduce((sum, p) => sum + (p.amount || 0), 0),
-      coins: payments.filter(p => p.type === "coins").reduce((sum, p) => sum + (p.amount || 0), 0),
-      reports: payments.filter(p => p.type === "report").reduce((sum, p) => sum + (p.amount || 0), 0),
-      upsells: payments.filter(p => p.type === "upsell").reduce((sum, p) => sum + (p.amount || 0), 0),
+      subscription: payments.filter(p => p.type === "subscription" || !p.type).reduce((sum, p) => sum + getAmount(p), 0),
+      coins: payments.filter(p => p.type === "coins").reduce((sum, p) => sum + getAmount(p), 0),
+      reports: payments.filter(p => p.type === "report").reduce((sum, p) => sum + getAmount(p), 0),
+      upsells: payments.filter(p => p.type === "upsell").reduce((sum, p) => sum + getAmount(p), 0),
     };
     
     // Subscriber counts
@@ -139,6 +153,28 @@ export async function GET(request: NextRequest) {
       ? ((trialsConverted / trialsStarted) * 100).toFixed(1)
       : "0";
     
+    // Upsell analytics - breakdown by offer type
+    const upsellPayments = payments.filter(p => p.type === "upsell");
+    const upsellAnalytics: { [key: string]: { count: number; revenue: number } } = {};
+    
+    upsellPayments.forEach(p => {
+      const offers = p.offers ? p.offers.split(",").map((s: string) => s.trim()) : ["unknown"];
+      const amount = getAmount(p);
+      
+      offers.forEach((offer: string) => {
+        if (!upsellAnalytics[offer]) {
+          upsellAnalytics[offer] = { count: 0, revenue: 0 };
+        }
+        upsellAnalytics[offer].count += 1;
+        upsellAnalytics[offer].revenue += amount / offers.length; // Split revenue among offers
+      });
+    });
+    
+    // Sort upsells by revenue (highest first)
+    const upsellBreakdown = Object.entries(upsellAnalytics)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.revenue - a.revenue);
+    
     // Revenue over time (last 30 days)
     const revenueOverTime: { date: string; revenue: number }[] = [];
     for (let i = 29; i >= 0; i--) {
@@ -147,7 +183,7 @@ export async function GET(request: NextRequest) {
       const dateStr = date.toISOString().split("T")[0];
       const dayRevenue = payments
         .filter(p => p.createdAt && p.createdAt.startsWith(dateStr))
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
+        .reduce((sum, p) => sum + getAmount(p), 0);
       revenueOverTime.push({ date: dateStr, revenue: dayRevenue });
     }
     
@@ -158,16 +194,27 @@ export async function GET(request: NextRequest) {
       yearly: users.filter(u => u.subscriptionPlan === "yearly" && u.subscriptionStatus === "active").length,
     };
     
-    // Recent transactions (last 50)
-    const recentTransactions = payments.slice(0, 50).map(p => ({
-      id: p.id,
-      date: p.createdAt,
-      userId: p.userId,
-      amount: p.amount,
-      plan: p.plan,
-      type: p.type,
-      status: p.status || "succeeded",
-    }));
+    // Create a map of userId to user data for quick lookup
+    const userMap = new Map<string, { email?: string; name?: string }>();
+    users.forEach(u => {
+      userMap.set(u.id, { email: u.email, name: u.name });
+    });
+    
+    // Recent transactions (last 50) with user email/name
+    const recentTransactions = payments.slice(0, 50).map(p => {
+      const userData = userMap.get(p.userId) || {};
+      return {
+        id: p.id,
+        date: p.createdAt,
+        userId: p.userId,
+        userEmail: userData.email || p.customerEmail || "Unknown",
+        userName: userData.name || "Unknown",
+        amount: getAmount(p),
+        plan: p.plan,
+        type: p.type,
+        status: p.paymentStatus || p.status || "succeeded",
+      };
+    });
     
     return NextResponse.json({
       // Primary KPIs
@@ -208,6 +255,11 @@ export async function GET(request: NextRequest) {
       // Charts data
       revenueOverTime,
       subscriptionDistribution,
+      
+      // Upsell analytics
+      upsellBreakdown,
+      totalUpsellRevenue: upsellPayments.reduce((sum, p) => sum + getAmount(p), 0),
+      totalUpsellCount: upsellPayments.length,
       
       // Recent transactions
       recentTransactions,

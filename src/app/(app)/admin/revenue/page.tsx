@@ -23,8 +23,13 @@ import {
   XCircle,
   CheckCircle,
   Clock,
+  Filter,
+  ArrowUpDown,
+  GripVertical,
+  ChevronDown,
+  Package,
+  X,
 } from "lucide-react";
-import { generateUserId } from "@/lib/user-profile";
 
 interface RevenueData {
   mrr: string;
@@ -54,6 +59,9 @@ interface RevenueData {
   trialConversionRate: string;
   revenueOverTime: { date: string; revenue: number }[];
   subscriptionDistribution: { weekly: number; monthly: number; yearly: number };
+  upsellBreakdown: { name: string; count: number; revenue: number }[];
+  totalUpsellRevenue: number;
+  totalUpsellCount: number;
   recentTransactions: {
     id: string;
     date: string;
@@ -62,11 +70,27 @@ interface RevenueData {
     plan: string;
     type: string;
     status: string;
+    userEmail: string;
+    userName: string;
   }[];
   totalPayments: number;
   totalUsers: number;
   uniquePayingUsers: number;
 }
+
+// Default card order
+const DEFAULT_CARD_ORDER = [
+  "primary-kpis",
+  "revenue-period",
+  "subscription-breakdown",
+  "upsell-analytics",
+  "subscriber-counts",
+  "churn-retention",
+  "transaction-activity",
+  "revenue-chart",
+  "subscription-distribution",
+  "recent-transactions",
+];
 
 export default function AdminRevenuePage() {
   const router = useRouter();
@@ -74,22 +98,63 @@ export default function AdminRevenuePage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<RevenueData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterPlan, setFilterPlan] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterDateRange, setFilterDateRange] = useState<string>("all");
+  
+  // Sorting
+  const [sortField, setSortField] = useState<string>("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  
+  // Card order (persisted in localStorage)
+  const [cardOrder, setCardOrder] = useState<string[]>(DEFAULT_CARD_ORDER);
+  const [draggedCard, setDraggedCard] = useState<string | null>(null);
+  
+  // Load card order from localStorage
+  useEffect(() => {
+    const savedOrder = localStorage.getItem("admin_card_order");
+    if (savedOrder) {
+      try {
+        setCardOrder(JSON.parse(savedOrder));
+      } catch (e) {
+        setCardOrder(DEFAULT_CARD_ORDER);
+      }
+    }
+  }, []);
 
   const fetchData = async () => {
     try {
       setRefreshing(true);
-      const userId = generateUserId();
-      const response = await fetch(`/api/admin/revenue?userId=${userId}`);
       
-      if (response.status === 403) {
-        setError("Access denied. Admin privileges required.");
-        setLoading(false);
-        setRefreshing(false);
+      // Check for admin session token
+      const token = localStorage.getItem("admin_session_token");
+      const expiry = localStorage.getItem("admin_session_expiry");
+      
+      if (!token || !expiry || new Date(expiry) < new Date()) {
+        // No valid session, redirect to login
+        localStorage.removeItem("admin_session_token");
+        localStorage.removeItem("admin_session_expiry");
+        router.push("/admin/login");
+        return;
+      }
+      
+      const response = await fetch(`/api/admin/revenue?token=${token}`);
+      
+      if (response.status === 401) {
+        // Session invalid or expired, redirect to login
+        localStorage.removeItem("admin_session_token");
+        localStorage.removeItem("admin_session_expiry");
+        router.push("/admin/login");
         return;
       }
       
       if (!response.ok) {
-        throw new Error("Failed to fetch revenue data");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch revenue data");
       }
       
       const result = await response.json();
@@ -105,7 +170,7 @@ export default function AdminRevenuePage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [router]);
 
   if (loading) {
     return (
@@ -157,6 +222,128 @@ export default function AdminRevenuePage() {
     });
   };
 
+  // Filter transactions
+  const getFilteredTransactions = () => {
+    let filtered = [...data.recentTransactions];
+    
+    // Filter by type
+    if (filterType !== "all") {
+      filtered = filtered.filter(tx => (tx.type || "subscription") === filterType);
+    }
+    
+    // Filter by plan
+    if (filterPlan !== "all") {
+      filtered = filtered.filter(tx => tx.plan === filterPlan);
+    }
+    
+    // Filter by status
+    if (filterStatus !== "all") {
+      filtered = filtered.filter(tx => tx.status === filterStatus);
+    }
+    
+    // Filter by date range
+    if (filterDateRange !== "all") {
+      const now = new Date();
+      let startDate: Date;
+      
+      switch (filterDateRange) {
+        case "today":
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case "week":
+          startDate = new Date(now);
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case "month":
+          startDate = new Date(now);
+          startDate.setMonth(startDate.getMonth() - 1);
+          break;
+        case "year":
+          startDate = new Date(now);
+          startDate.setFullYear(startDate.getFullYear() - 1);
+          break;
+        default:
+          startDate = new Date(0);
+      }
+      
+      filtered = filtered.filter(tx => new Date(tx.date) >= startDate);
+    }
+    
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal: any, bVal: any;
+      
+      switch (sortField) {
+        case "date":
+          aVal = new Date(a.date).getTime();
+          bVal = new Date(b.date).getTime();
+          break;
+        case "amount":
+          aVal = a.amount;
+          bVal = b.amount;
+          break;
+        case "user":
+          aVal = a.userName || a.userEmail;
+          bVal = b.userName || b.userEmail;
+          break;
+        case "type":
+          aVal = a.type || "";
+          bVal = b.type || "";
+          break;
+        default:
+          aVal = new Date(a.date).getTime();
+          bVal = new Date(b.date).getTime();
+      }
+      
+      if (sortDirection === "asc") {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+    
+    return filtered;
+  };
+
+  // Card drag handlers
+  const handleDragStart = (cardId: string) => {
+    setDraggedCard(cardId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, cardId: string) => {
+    e.preventDefault();
+    if (!draggedCard || draggedCard === cardId) return;
+    
+    const newOrder = [...cardOrder];
+    const draggedIndex = newOrder.indexOf(draggedCard);
+    const targetIndex = newOrder.indexOf(cardId);
+    
+    newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedCard);
+    
+    setCardOrder(newOrder);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCard(null);
+    localStorage.setItem("admin_card_order", JSON.stringify(cardOrder));
+  };
+
+  const resetCardOrder = () => {
+    setCardOrder(DEFAULT_CARD_ORDER);
+    localStorage.removeItem("admin_card_order");
+  };
+
+  const clearFilters = () => {
+    setFilterType("all");
+    setFilterPlan("all");
+    setFilterStatus("all");
+    setFilterDateRange("all");
+  };
+
+  const hasActiveFilters = filterType !== "all" || filterPlan !== "all" || filterStatus !== "all" || filterDateRange !== "all";
+  const filteredTransactions = getFilteredTransactions();
+
   const maxRevenue = Math.max(...data.revenueOverTime.map(d => d.revenue), 1);
 
   return (
@@ -179,9 +366,158 @@ export default function AdminRevenuePage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 space-y-6">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+              showFilters || hasActiveFilters ? "bg-primary/20 text-primary" : "bg-white/10 text-white/70 hover:bg-white/20"
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+            {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-primary" />}
+          </button>
+          
+          <button
+            onClick={resetCardOrder}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 text-white/70 hover:bg-white/20 text-sm transition-colors"
+          >
+            <GripVertical className="w-4 h-4" />
+            Reset Layout
+          </button>
+          
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+        {/* Filter Panel */}
+        {showFilters && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-[#1A2235] rounded-xl p-4 border border-white/10"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Date Range Filter */}
+              <div>
+                <label className="text-white/50 text-xs mb-2 block">Date Range</label>
+                <select
+                  value={filterDateRange}
+                  onChange={(e) => setFilterDateRange(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary/50"
+                >
+                  <option value="all">All Time</option>
+                  <option value="today">Today</option>
+                  <option value="week">Last 7 Days</option>
+                  <option value="month">Last 30 Days</option>
+                  <option value="year">Last Year</option>
+                </select>
+              </div>
+              
+              {/* Type Filter */}
+              <div>
+                <label className="text-white/50 text-xs mb-2 block">Type</label>
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary/50"
+                >
+                  <option value="all">All Types</option>
+                  <option value="subscription">Subscription</option>
+                  <option value="upsell">Upsell</option>
+                  <option value="coins">Coins</option>
+                  <option value="report">Report</option>
+                </select>
+              </div>
+              
+              {/* Plan Filter */}
+              <div>
+                <label className="text-white/50 text-xs mb-2 block">Plan</label>
+                <select
+                  value={filterPlan}
+                  onChange={(e) => setFilterPlan(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary/50"
+                >
+                  <option value="all">All Plans</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+              
+              {/* Status Filter */}
+              <div>
+                <label className="text-white/50 text-xs mb-2 block">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary/50"
+                >
+                  <option value="all">All Status</option>
+                  <option value="succeeded">Succeeded</option>
+                  <option value="paid">Paid</option>
+                  <option value="failed">Failed</option>
+                  <option value="refunded">Refunded</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* Sort Options */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <label className="text-white/50 text-xs mb-2 block">Sort Transactions By</label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { field: "date", label: "Date" },
+                  { field: "amount", label: "Amount" },
+                  { field: "user", label: "User" },
+                  { field: "type", label: "Type" },
+                ].map(({ field, label }) => (
+                  <button
+                    key={field}
+                    onClick={() => {
+                      if (sortField === field) {
+                        setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                      } else {
+                        setSortField(field);
+                        setSortDirection("desc");
+                      }
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                      sortField === field
+                        ? "bg-primary/20 text-primary"
+                        : "bg-white/5 text-white/60 hover:bg-white/10"
+                    }`}
+                  >
+                    {label}
+                    {sortField === field && (
+                      <ArrowUpDown className={`w-3 h-3 ${sortDirection === "asc" ? "rotate-180" : ""}`} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Primary KPIs */}
-        <section>
+        <section
+          draggable
+          onDragStart={() => handleDragStart("primary-kpis")}
+          onDragOver={(e) => handleDragOver(e, "primary-kpis")}
+          onDragEnd={handleDragEnd}
+          className={`${draggedCard === "primary-kpis" ? "opacity-50" : ""}`}
+        >
           <h2 className="text-white/70 text-sm font-medium mb-3 flex items-center gap-2">
+            <GripVertical className="w-4 h-4 cursor-grab text-white/30" />
             <DollarSign className="w-4 h-4" /> Primary KPIs
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -261,6 +597,72 @@ export default function AdminRevenuePage() {
           <div className="grid grid-cols-2 gap-3 mt-4">
             <MetricCard title="ARPU" value={formatCurrency(data.arpu)} subtitle="Avg Revenue Per User" />
             <MetricCard title="LTV" value={formatCurrency(data.ltv)} subtitle="Lifetime Value" />
+          </div>
+        </section>
+
+        {/* Upsell Analytics */}
+        <section>
+          <h2 className="text-white/70 text-sm font-medium mb-3 flex items-center gap-2">
+            <Package className="w-4 h-4" /> Upsell Analytics
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Upsell Summary */}
+            <div className="bg-[#1A2235] rounded-xl p-4 border border-white/10">
+              <h3 className="text-white/60 text-xs mb-3">Upsell Summary</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50 text-sm">Total Upsells</span>
+                  <span className="text-white font-semibold">{data.totalUpsellCount || 0}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50 text-sm">Total Revenue</span>
+                  <span className="text-green-400 font-semibold">{formatCurrency(data.totalUpsellRevenue || 0)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50 text-sm">Avg per Upsell</span>
+                  <span className="text-white font-semibold">
+                    {data.totalUpsellCount > 0 
+                      ? formatCurrency((data.totalUpsellRevenue || 0) / data.totalUpsellCount) 
+                      : "$0.00"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Upsell Breakdown */}
+            <div className="md:col-span-2 bg-[#1A2235] rounded-xl p-4 border border-white/10">
+              <h3 className="text-white/60 text-xs mb-3">Revenue by Upsell Type (Highest First)</h3>
+              {data.upsellBreakdown && data.upsellBreakdown.length > 0 ? (
+                <div className="space-y-3">
+                  {data.upsellBreakdown.map((upsell, index) => {
+                    const maxRevenue = data.upsellBreakdown[0]?.revenue || 1;
+                    const percentage = (upsell.revenue / maxRevenue) * 100;
+                    return (
+                      <div key={upsell.name}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-white/70 capitalize">{upsell.name.replace(/-/g, " ")}</span>
+                          <span className="text-white/50">
+                            {upsell.count} sales • {formatCurrency(upsell.revenue)}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full ${
+                              index === 0 ? "bg-green-500" : 
+                              index === 1 ? "bg-blue-500" : 
+                              index === 2 ? "bg-purple-500" : "bg-amber-500"
+                            }`} 
+                            style={{ width: `${percentage}%` }} 
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-white/40 text-sm text-center py-4">No upsell data available</p>
+              )}
+            </div>
           </div>
         </section>
 
@@ -426,6 +828,11 @@ export default function AdminRevenuePage() {
         <section>
           <h2 className="text-white/70 text-sm font-medium mb-3 flex items-center gap-2">
             <Clock className="w-4 h-4" /> Recent Transactions
+            {hasActiveFilters && (
+              <span className="text-xs text-primary ml-2">
+                ({filteredTransactions.length} of {data.recentTransactions.length} shown)
+              </span>
+            )}
           </h2>
           <div className="bg-[#1A2235] rounded-xl border border-white/10 overflow-hidden">
             <div className="overflow-x-auto">
@@ -433,7 +840,7 @@ export default function AdminRevenuePage() {
                 <thead>
                   <tr className="border-b border-white/10">
                     <th className="text-left text-white/50 text-xs font-medium px-4 py-3">Date</th>
-                    <th className="text-left text-white/50 text-xs font-medium px-4 py-3">User ID</th>
+                    <th className="text-left text-white/50 text-xs font-medium px-4 py-3">User</th>
                     <th className="text-left text-white/50 text-xs font-medium px-4 py-3">Type</th>
                     <th className="text-left text-white/50 text-xs font-medium px-4 py-3">Plan</th>
                     <th className="text-right text-white/50 text-xs font-medium px-4 py-3">Amount</th>
@@ -441,28 +848,33 @@ export default function AdminRevenuePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.recentTransactions.length === 0 ? (
+                  {filteredTransactions.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-center text-white/40 py-8">
-                        No transactions yet
+                        {hasActiveFilters ? "No transactions match your filters" : "No transactions yet"}
                       </td>
                     </tr>
                   ) : (
-                    data.recentTransactions.map((tx) => (
+                    filteredTransactions.map((tx) => (
                       <tr key={tx.id} className="border-b border-white/5 hover:bg-white/5">
                         <td className="text-white/70 text-sm px-4 py-3">{formatDate(tx.date)}</td>
-                        <td className="text-white/50 text-xs px-4 py-3 font-mono">{tx.userId?.slice(0, 12)}...</td>
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="text-white/80 text-sm">{tx.userName !== "Unknown" ? tx.userName : tx.userEmail?.split("@")[0] || "Unknown"}</p>
+                            <p className="text-white/40 text-xs">{tx.userEmail}</p>
+                          </div>
+                        </td>
                         <td className="text-white/70 text-sm px-4 py-3 capitalize">{tx.type || "subscription"}</td>
                         <td className="text-white/70 text-sm px-4 py-3 capitalize">{tx.plan || "-"}</td>
                         <td className="text-white text-sm px-4 py-3 text-right font-medium">{formatCurrency(tx.amount || 0)}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
-                            tx.status === "succeeded" ? "bg-green-500/20 text-green-400" :
+                            tx.status === "succeeded" || tx.status === "paid" ? "bg-green-500/20 text-green-400" :
                             tx.status === "failed" ? "bg-red-500/20 text-red-400" :
                             tx.status === "refunded" ? "bg-amber-500/20 text-amber-400" :
                             "bg-gray-500/20 text-gray-400"
                           }`}>
-                            {tx.status === "succeeded" && <CheckCircle className="w-3 h-3" />}
+                            {(tx.status === "succeeded" || tx.status === "paid") && <CheckCircle className="w-3 h-3" />}
                             {tx.status === "failed" && <XCircle className="w-3 h-3" />}
                             {tx.status === "refunded" && <RefreshCw className="w-3 h-3" />}
                             {tx.status}
