@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Shield } from "lucide-react";
 import { useHaptic } from "@/hooks/useHaptic";
+import { pixelEvents } from "@/lib/pixel-events";
 
 // Generate random stats with some variation for authenticity
 function generateRandomStats() {
@@ -32,12 +33,14 @@ export default function Step15Page() {
   // Generate random stats once on mount
   const readingStats = useMemo(() => generateRandomStats(), []);
 
-  // Load captured palm image from localStorage
+  // Load captured palm image from localStorage and track ViewContent
   useEffect(() => {
     const savedImage = localStorage.getItem("palmcosmic_palm_image");
     if (savedImage) {
       setPalmImage(savedImage);
     }
+    // Track ViewContent when user sees their palm reading report
+    pixelEvents.viewContent("Palm Reading Report", "report");
   }, []);
 
   const isValidEmail = (value: string) => {
@@ -59,6 +62,8 @@ export default function Step15Page() {
     // Store email if provided
     if (trimmed.length > 0) {
       localStorage.setItem("palmcosmic_email", trimmed);
+      // Track AddToWishlist when user provides email
+      pixelEvents.addToWishlist("Personalized Palm Reading Report");
     }
     router.push("/onboarding/step-16");
   };

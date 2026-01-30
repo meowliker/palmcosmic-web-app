@@ -61,6 +61,10 @@ export default function Step17Page() {
   useEffect(() => {
     const handlePageShow = () => setIsProcessing(false);
     window.addEventListener("pageshow", handlePageShow);
+    
+    // Track ViewContent when user sees pricing page
+    pixelEvents.viewContent("Subscription Plans", "pricing");
+    
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, []);
 
@@ -116,7 +120,12 @@ export default function Step17Page() {
     setIsProcessing(true);
     
     // Track trial initiation
-    const planPrice = selectedPlan === "weekly" ? 4.99 : selectedPlan === "monthly" ? 9.99 : 49.99;
+    const plan = selectedPlan || "monthly";
+    const planPrice = plan === "weekly" ? 4.99 : plan === "monthly" ? 9.99 : 49.99;
+    const planName = `${plan.charAt(0).toUpperCase() + plan.slice(1)} Subscription`;
+    
+    // Track AddToCart when user clicks "Start Trial"
+    pixelEvents.addToCart(planPrice, planName);
     pixelEvents.startTrial(planPrice);
 
     try {
@@ -134,6 +143,8 @@ export default function Step17Page() {
       const data = await response.json();
 
       if (data.url) {
+        // Track InitiateCheckout before redirecting to Stripe
+        pixelEvents.initiateCheckout(planPrice, [planName]);
         // Redirect to Stripe Checkout
         window.location.href = data.url;
       } else if (data.error) {

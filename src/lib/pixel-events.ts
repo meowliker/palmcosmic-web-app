@@ -35,6 +35,22 @@ export const pixelEvents = {
   /** User lands on the app/starts onboarding */
   lead: () => trackPixelEvent("Lead"),
   
+  /** User shows interest (email submitted, "Get My Prediction" clicked) */
+  addToWishlist: (contentName: string = "Prediction Report") => 
+    trackPixelEvent("AddToWishlist", { 
+      content_name: contentName,
+      content_category: "Astrology Report"
+    }),
+  
+  /** User clicks "Start Trial" button (before payment) */
+  addToCart: (value: number, contentName: string) => 
+    trackPixelEvent("AddToCart", { 
+      value, 
+      currency: "USD",
+      content_name: contentName,
+      content_type: "product"
+    }),
+  
   /** User completes sign-up (creates account) */
   completeRegistration: (email?: string) => 
     trackPixelEvent("CompleteRegistration", { 

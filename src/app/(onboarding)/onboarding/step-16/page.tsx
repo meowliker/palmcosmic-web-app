@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { detectHandLandmarks } from "@/lib/palm-detection";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { pixelEvents } from "@/lib/pixel-events";
 
 const predictionLabels = [
   { text: "Children", emoji: "👶", top: "15%", left: "20%", rotation: -15 },
@@ -86,6 +87,8 @@ export default function Step16Page() {
   }, [palmImage]);
 
   const handleGetPrediction = () => {
+    // Track AddToWishlist when user clicks "Get My Prediction"
+    pixelEvents.addToWishlist("Full Prediction Access");
     router.push("/onboarding/step-17");
   };
 
