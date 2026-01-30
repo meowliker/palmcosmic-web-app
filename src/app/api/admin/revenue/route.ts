@@ -52,8 +52,8 @@ export async function GET(request: NextRequest) {
     // Helper to get payment amount (amountTotal is in cents from Stripe)
     const getAmount = (p: any) => {
       const amt = p.amountTotal || p.amount || 0;
-      // If amount is in cents (> 100), convert to dollars
-      return amt > 100 ? amt / 100 : amt;
+      // Stripe amounts are ALWAYS in cents, so always convert to dollars
+      return amt / 100;
     };
     
     // Calculate metrics
