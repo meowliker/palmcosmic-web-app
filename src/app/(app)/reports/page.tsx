@@ -13,6 +13,7 @@ import { TrialStatusBanner } from "@/components/TrialStatusBanner";
 import { doc, getDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { UserAvatar, cacheUserInfo } from "@/components/UserAvatar";
+import { BirthChartTimer } from "@/components/BirthChartTimer";
 
 interface DailyData {
   sunRiseSet?: { sunrise: string; sunset: string };
@@ -32,6 +33,8 @@ export default function DashboardPage() {
   });
   const [userName, setUserName] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [birthChartTimerActive, setBirthChartTimerActive] = useState(false);
+  const [birthChartTimerStartedAt, setBirthChartTimerStartedAt] = useState<string | null>(null);
 
   // Get ascendant sign from onboarding store as fallback
   const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, ascendantSign: storeAscendantSign } = useOnboardingStore();
@@ -63,6 +66,14 @@ export default function DashboardPage() {
           if (data.name) setUserName(data.name);
           if (data.email) setUserEmail(data.email);
           cacheUserInfo(data.name, data.email);
+          
+          // Load birth chart timer data
+          if (data.birthChartTimerActive !== undefined) {
+            setBirthChartTimerActive(data.birthChartTimerActive);
+          }
+          if (data.birthChartTimerStartedAt) {
+            setBirthChartTimerStartedAt(data.birthChartTimerStartedAt);
+          }
           
           // Use ascendant sign for daily horoscope
           if (data.ascendantSign) {
@@ -386,6 +397,15 @@ export default function DashboardPage() {
                         <button className="mt-1 px-3 py-1 bg-primary/20 text-primary text-xs rounded-full">
                           Get Report
                         </button>
+                      )}
+                      {unlockedFeatures.birthChart && birthChartTimerActive && (
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-white/50 text-xs">Ready in:</span>
+                          <BirthChartTimer 
+                            startedAt={birthChartTimerStartedAt} 
+                            isActive={birthChartTimerActive} 
+                          />
+                        </div>
                       )}
                       {birthChartGenerating && (
                         <p className="text-white/50 text-xs mt-1">Generating your chart...</p>

@@ -142,13 +142,19 @@ export async function POST(request: NextRequest) {
         if (type === "upsell") {
           const offerList = (offers || "").split(",").map((s) => s.trim()).filter(Boolean);
           const unlockUpdates = offersToUnlockedFeatures(offerList);
-          await userRef.set(
-            {
-              unlockedFeatures: unlockUpdates,
-              updatedAt: now,
-            },
-            { merge: true }
-          );
+          
+          const updateData: any = {
+            unlockedFeatures: unlockUpdates,
+            updatedAt: now,
+          };
+          
+          // Start 24-hour timer if birth chart is included in upsell
+          if (unlockUpdates.birthChart) {
+            updateData.birthChartTimerActive = true;
+            updateData.birthChartTimerStartedAt = now;
+          }
+          
+          await userRef.set(updateData, { merge: true });
         } else if (type === "coins") {
           const coinsToAdd = parseInt(coins || "0", 10) || 0;
           if (coinsToAdd > 0) {
@@ -162,15 +168,20 @@ export async function POST(request: NextRequest) {
           }
         } else if (type === "report") {
           if (feature) {
-            await userRef.set(
-              {
-                unlockedFeatures: {
-                  [feature]: true,
-                },
-                updatedAt: now,
+            const updateData: any = {
+              unlockedFeatures: {
+                [feature]: true,
               },
-              { merge: true }
-            );
+              updatedAt: now,
+            };
+            
+            // Start 24-hour timer for birth chart
+            if (feature === "birthChart") {
+              updateData.birthChartTimerActive = true;
+              updateData.birthChartTimerStartedAt = now;
+            }
+            
+            await userRef.set(updateData, { merge: true });
           }
         } else {
           const coinsToAdd = getPlanCoins(plan || null);
