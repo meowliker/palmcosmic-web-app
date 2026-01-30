@@ -365,7 +365,13 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Birth Chart Report */}
-                <div className="space-y-0">
+                <div 
+                  className={`bg-[#1A2235] border border-primary/20 transition-colors ${
+                    birthChartTimerActive && !birthChartTimerExpired 
+                      ? "rounded-2xl" 
+                      : "rounded-2xl"
+                  }`}
+                >
                   <div 
                     onClick={async () => {
                       // Don't allow click if timer is active and not expired
@@ -398,10 +404,10 @@ export default function DashboardPage() {
                         setUpsellPopup({ isOpen: true, feature: "birthChart" });
                       }
                     }}
-                    className={`bg-[#1A2235] border border-primary/20 p-3 transition-colors relative ${
+                    className={`p-3 relative ${
                       birthChartTimerActive && !birthChartTimerExpired 
-                        ? "rounded-t-2xl cursor-not-allowed opacity-70" 
-                        : "rounded-2xl cursor-pointer hover:border-primary/40"
+                        ? "cursor-not-allowed opacity-70" 
+                        : "cursor-pointer hover:bg-white/5"
                     }`}
                   >
                     {!unlockedFeatures.birthChart && (
@@ -435,7 +441,7 @@ export default function DashboardPage() {
                   </div>
                   {/* Timer Bar */}
                   {unlockedFeatures.birthChart && birthChartTimerActive && (
-                    <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-b-2xl px-4 py-2 flex items-center justify-center gap-2 border-x border-b border-amber-500/30">
+                    <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 px-4 py-2.5 flex items-center justify-center gap-2 border-t border-primary/20">
                       <BirthChartTimer 
                         startedAt={birthChartTimerStartedAt} 
                         isActive={birthChartTimerActive}

@@ -57,7 +57,7 @@ export function BirthChartTimer({ startedAt, isActive, className = "", onExpire 
     return (
       <div className={`flex items-center gap-1.5 text-green-400 text-xs ${className}`}>
         <Clock className="w-3 h-3" />
-        <span>Ready!</span>
+        <span>Your Report is Ready!</span>
       </div>
     );
   }
