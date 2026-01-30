@@ -230,13 +230,18 @@ export default function ChatPage() {
     const saveChat = async () => {
       try {
         console.log("[Chat] Saving chat for userId:", currentUserId, "messages count:", messages.length);
-        const storedMessages: StoredMessage[] = messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : m.timestamp,
-          palmImage: m.palmImage,
-          traits: m.traits,
-        }));
+        // Filter out undefined fields - Firebase doesn't allow undefined values
+        const storedMessages: StoredMessage[] = messages.map((m) => {
+          const msg: StoredMessage = {
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : m.timestamp,
+          };
+          // Only add optional fields if they exist
+          if (m.palmImage) msg.palmImage = m.palmImage;
+          if (m.traits) msg.traits = m.traits;
+          return msg;
+        });
         
         const chatRef = doc(db, "chat_messages", currentUserId);
         await setDoc(chatRef, {
