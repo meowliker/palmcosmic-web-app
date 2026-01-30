@@ -10,7 +10,7 @@ import { useHaptic } from "@/hooks/useHaptic";
 import { pixelEvents } from "@/lib/pixel-events";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { db } from "@/lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { generateUserId } from "@/lib/user-profile";
 
 // Generate random stats with some variation for authenticity
@@ -34,6 +34,7 @@ export default function Step15Page() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [palmImage, setPalmImage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
 
   // Get user data from onboarding store
   const { gender, birthYear, relationshipStatus, goals } = useOnboardingStore();
@@ -56,6 +57,50 @@ export default function Step15Page() {
   };
 
   const { triggerLight } = useHaptic();
+  
+  // Check if email already has an active subscription
+  const checkExistingSubscription = async (emailToCheck: string): Promise<boolean> => {
+    try {
+      // Check in users collection for existing subscription
+      const usersQuery = query(
+        collection(db, "users"),
+        where("email", "==", emailToCheck)
+      );
+      const usersSnapshot = await getDocs(usersQuery);
+      
+      for (const userDoc of usersSnapshot.docs) {
+        const userData = userDoc.data();
+        // Check if user has an active subscription
+        if (userData.subscriptionStatus === "active" || userData.isSubscribed === true) {
+          return true;
+        }
+      }
+      
+      // Also check payments collection for completed subscription payments
+      const paymentsQuery = query(
+        collection(db, "payments"),
+        where("customerEmail", "==", emailToCheck),
+        where("type", "==", "subscription")
+      );
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+      
+      if (!paymentsSnapshot.empty) {
+        // Check if any payment has active status
+        for (const paymentDoc of paymentsSnapshot.docs) {
+          const paymentData = paymentDoc.data();
+          if (paymentData.paymentStatus === "paid" || paymentData.status === "succeeded") {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (err) {
+      console.error("Error checking subscription:", err);
+      return false;
+    }
+  };
+
   const handleContinue = async () => {
     triggerLight();
     const trimmed = email.trim();
@@ -69,6 +114,16 @@ export default function Step15Page() {
 
     // Store email if provided and save to Firebase
     if (trimmed.length > 0) {
+      // Check if email already has an active subscription
+      setIsCheckingEmail(true);
+      const hasSubscription = await checkExistingSubscription(trimmed);
+      setIsCheckingEmail(false);
+      
+      if (hasSubscription) {
+        setEmailError("This email is already registered with an active subscription. Please use a different email or log in to your existing account.");
+        return;
+      }
+      
       localStorage.setItem("palmcosmic_email", trimmed);
       // Track AddToWishlist when user provides email
       pixelEvents.addToWishlist("Personalized Palm Reading Report");
@@ -227,8 +282,9 @@ export default function Step15Page() {
           onClick={handleContinue}
           className="w-full h-14 text-lg font-semibold"
           size="lg"
+          disabled={isCheckingEmail || isSaving}
         >
-          Continue
+          {isCheckingEmail ? "Checking..." : isSaving ? "Saving..." : "Continue"}
         </Button>
       </div>
     </motion.div>

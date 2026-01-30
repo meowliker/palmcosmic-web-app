@@ -12,40 +12,41 @@ import { pixelEvents } from "@/lib/pixel-events";
 
 const pricingPlans = [
   {
-    id: "weekly",
-    name: "Weekly",
-    price: "$4.99",
-    period: "/week",
-    trialDays: 3,
-    trialText: "3-day free trial",
-    description: "Billed weekly after trial",
+    id: "1week",
+    name: "1-Week Trial",
+    trialPrice: "$1",
+    originalPrice: "$4.99",
+    trialDays: 7,
+    afterTrialPrice: "$19.99",
+    afterTrialPeriod: "2-Week Plan",
+    description: "then 2-Week Plan $19.99",
   },
   {
-    id: "monthly",
-    name: "Monthly",
-    price: "$9.99",
-    period: "/month",
-    trialDays: 7,
-    trialText: "1-week free trial",
-    description: "Billed monthly after trial",
+    id: "2week",
+    name: "2-Week Trial",
+    trialPrice: "$5.49",
+    originalPrice: "$10.99",
+    trialDays: 14,
+    afterTrialPrice: "$19.99",
+    afterTrialPeriod: "2-Week Plan",
+    description: "then 2-Week Plan $19.99",
     popular: true,
   },
   {
-    id: "yearly",
-    name: "Yearly",
-    price: "$39.99",
-    period: "/year",
-    trialDays: 14,
-    trialText: "2-week free trial",
-    description: "Best value - Save 67%",
-    bestValue: true,
-    bonusCoins: 30,
+    id: "4week",
+    name: "4-Week Trial",
+    trialPrice: "$9.99",
+    originalPrice: "$19.99",
+    trialDays: 28,
+    afterTrialPrice: "$29.99",
+    afterTrialPeriod: "1-Month Plan",
+    description: "then 1-Month Plan $29.99",
   },
 ];
 
 export default function Step17Page() {
   const router = useRouter();
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("monthly");
+  const [selectedPlan, setSelectedPlan] = useState<string>("2week");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPromoInput, setShowPromoInput] = useState(false);
   const [promoCode, setPromoCode] = useState("");
@@ -120,9 +121,9 @@ export default function Step17Page() {
     setIsProcessing(true);
     
     // Track trial initiation
-    const plan = selectedPlan || "monthly";
-    const planPrice = plan === "weekly" ? 4.99 : plan === "monthly" ? 9.99 : 49.99;
-    const planName = `${plan.charAt(0).toUpperCase() + plan.slice(1)} Subscription`;
+    const plan = selectedPlan || "2week";
+    const planPrice = plan === "1week" ? 1 : plan === "2week" ? 5.49 : 9.99;
+    const planName = `${plan} Trial`;
     
     // Track AddToCart when user clicks "Start Trial"
     pixelEvents.addToCart(planPrice, planName);
@@ -198,7 +199,7 @@ export default function Step17Page() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 + index * 0.1 }}
-              onClick={() => setSelectedPlan(plan.id as SubscriptionPlan)}
+              onClick={() => setSelectedPlan(plan.id)}
               className={`w-full p-4 rounded-xl border-2 transition-all relative ${
                 selectedPlan === plan.id
                   ? "border-primary bg-primary/10"
@@ -214,30 +215,21 @@ export default function Step17Page() {
               <div className="flex items-center justify-between">
                 <div className="text-left">
                   <h3 className="font-semibold text-base">{plan.name}</h3>
-                  <p className="text-xs text-primary mt-1">
-                    {plan.trialText}
+                  <p className="text-xs mt-1">
+                    <span className="text-primary font-semibold">{plan.trialPrice}</span>
+                    {" "}
+                    <span className="text-muted-foreground line-through">{plan.originalPrice}</span>
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {plan.description}
                   </p>
-                  {(plan as any).bestValue && (
-                    <span className="inline-block mt-1 px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
-                      Best Value
-                    </span>
-                  )}
                 </div>
 
                 <div className="text-right">
-                  <span className="text-2xl font-bold">{plan.price}</span>
+                  <span className="text-2xl font-bold">{plan.trialPrice}</span>
                   <p className="text-xs text-muted-foreground">
-                    {plan.period}
+                    {plan.trialDays === 7 ? "1-WEEK" : plan.trialDays === 14 ? "2-WEEK" : "4-WEEK"} trial
                   </p>
-                  {(plan as any).bonusCoins && (
-                    <div className="flex items-center gap-1 justify-end mt-1">
-                      <span className="text-xs text-yellow-400 font-semibold">+{(plan as any).bonusCoins}</span>
-                      <Coins className="w-3 h-3 text-yellow-400" />
-                    </div>
-                  )}
                 </div>
               </div>
             </motion.button>
@@ -329,11 +321,11 @@ export default function Step17Page() {
             </button>
             <span className="text-xs text-muted-foreground leading-relaxed">
               I confirm that I have read and agree to the{" "}
-              <a href="#" className="text-primary underline">Terms of Use</a>,{" "}
-              <a href="#" className="text-primary underline">Billing Terms</a> and{" "}
-              <a href="#" className="text-primary underline">Money-back Policy</a>.
-              Your free trial will begin immediately. After the trial period ends, you&apos;ll be automatically charged the subscription price until canceled.
-              By completing your purchase, you consent to us securely storing your payment details for future charges. No refunds for partial periods. You can cancel subscription anytime via account settings or by contacting support at support@palmcosmic.app.
+              <a href="/Terms/terms-of-service.html" target="_blank" className="text-primary underline">Terms of Service</a>,{" "}
+              <a href="/Terms/billing-terms.html" target="_blank" className="text-primary underline">Billing Terms</a> and{" "}
+              <a href="/Terms/money-back-policy.html" target="_blank" className="text-primary underline">Money-back Policy</a>.
+              {" "}Start your {selectedPlan === "1week" ? "7-day" : selectedPlan === "2week" ? "14-day" : "28-day"} trial for {selectedPlan === "1week" ? "$1" : selectedPlan === "2week" ? "$5.49" : "$9.99"}. After the trial, you&apos;ll be charged {selectedPlan === "4week" ? "$29.99 monthly" : "$19.99 every 2 weeks"} until canceled.
+              By completing your purchase, you consent to us securely storing your payment details for future charges. No refunds for partial periods. You can cancel subscription anytime via account settings or by contacting support at weatpalmcosmic@gmail.com.
             </span>
           </label>
         </motion.div>
