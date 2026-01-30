@@ -349,8 +349,15 @@ export default function ChatPage() {
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center overflow-hidden">
-              <span className="text-white text-lg font-semibold">E</span>
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden shadow-lg shadow-purple-500/30">
+              <Image
+                src="/elysia.png"
+                alt="Elysia"
+                width={48}
+                height={48}
+                className="w-full h-full object-cover"
+                priority
+              />
             </div>
             <div>
               <h1 className="text-white font-semibold">Elysia</h1>
