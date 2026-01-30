@@ -374,21 +374,23 @@ export default function DashboardPage() {
                       }
                       if (unlockedFeatures.birthChart) {
                         if (!birthChartGenerating) {
-                          // Deactivate timer when user opens the report
+                          // Deactivate timer when user opens the report (with delay so user doesn't see it disappear)
                           if (birthChartTimerActive) {
-                            setBirthChartTimerActive(false);
-                            // Update Firebase to deactivate timer
-                            const userId = localStorage.getItem("palmcosmic_user_id");
-                            if (userId) {
-                              try {
-                                const { doc, updateDoc } = await import("firebase/firestore");
-                                await updateDoc(doc(db, "users", userId), {
-                                  birthChartTimerActive: false,
-                                });
-                              } catch (err) {
-                                console.error("Failed to deactivate timer:", err);
+                            // Update Firebase to deactivate timer after a delay
+                            setTimeout(async () => {
+                              setBirthChartTimerActive(false);
+                              const userId = localStorage.getItem("palmcosmic_user_id");
+                              if (userId) {
+                                try {
+                                  const { doc, updateDoc } = await import("firebase/firestore");
+                                  await updateDoc(doc(db, "users", userId), {
+                                    birthChartTimerActive: false,
+                                  });
+                                } catch (err) {
+                                  console.error("Failed to deactivate timer:", err);
+                                }
                               }
-                            }
+                            }, 2500);
                           }
                           router.push("/birth-chart");
                         }
