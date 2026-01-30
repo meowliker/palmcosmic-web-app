@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Check, Shield, Coins } from "lucide-react";
-import { useUserStore, SubscriptionPlan } from "@/lib/user-store";
+import { Check, Shield } from "lucide-react";
 import { generateUserId } from "@/lib/user-profile";
 import { pixelEvents } from "@/lib/pixel-events";
 
@@ -48,16 +47,8 @@ export default function Step17Page() {
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<string>("2week");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [showPromoInput, setShowPromoInput] = useState(false);
-  const [promoCode, setPromoCode] = useState("");
-  const [promoError, setPromoError] = useState("");
-  const [promoSuccess, setPromoSuccess] = useState(false);
-  const [promoData, setPromoData] = useState<any>(null);
-  const [isValidating, setIsValidating] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  
-  const { purchaseSubscription, unlockAllFeatures, setCoins } = useUserStore();
 
   useEffect(() => {
     const handlePageShow = () => setIsProcessing(false);
@@ -68,53 +59,6 @@ export default function Step17Page() {
     
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, []);
-
-  const handleApplyPromo = async () => {
-    if (!promoCode.trim()) {
-      setPromoError("Please enter a promo code");
-      return;
-    }
-
-    setIsValidating(true);
-    setPromoError("");
-
-    try {
-      const response = await fetch("/api/promo/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: promoCode }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setPromoSuccess(true);
-        setPromoData(result.data);
-        setPromoError("");
-      } else {
-        setPromoError(result.error || "Invalid promo code");
-        setPromoSuccess(false);
-      }
-    } catch (error) {
-      setPromoError("Failed to validate promo code");
-      setPromoSuccess(false);
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  const handlePromoActivate = () => {
-    // Give access based on promo data from Firebase
-    const plan = (promoData?.plan || "yearly") as SubscriptionPlan;
-    const coins = promoData?.coins || 100;
-    
-    purchaseSubscription(plan);
-    if (promoData?.unlockAll !== false) {
-      unlockAllFeatures();
-    }
-    setCoins(coins);
-    router.push("/onboarding/step-18");
-  };
 
   const handleStartTrial = async () => {
     setPaymentError("");
@@ -258,47 +202,6 @@ export default function Step17Page() {
           >
             {isProcessing ? "Processing..." : "Start Trial and Continue"}
           </Button>
-          
-          <button 
-            onClick={() => setShowPromoInput(!showPromoInput)}
-            className="mt-3 text-primary text-sm underline hover:text-primary/80 transition-colors"
-          >
-            Have a promo code?
-          </button>
-
-          {/* Promo Code Input */}
-          {showPromoInput && (
-            <div className="mt-4 space-y-3">
-              {promoSuccess ? (
-                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
-                  <p className="text-green-400 font-semibold mb-2">🎉 Promo code applied!</p>
-                  <p className="text-green-300 text-sm mb-3">You get full access for FREE</p>
-                  <Button
-                    onClick={handlePromoActivate}
-                    className="w-full bg-green-500 hover:bg-green-600"
-                  >
-                    Activate Free Access
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    placeholder="Enter promo code"
-                    className="flex-1 bg-card border border-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-primary"
-                  />
-                  <Button onClick={handleApplyPromo} variant="outline" disabled={isValidating}>
-                    {isValidating ? "..." : "Apply"}
-                  </Button>
-                </div>
-              )}
-              {promoError && (
-                <p className="text-red-400 text-sm">{promoError}</p>
-              )}
-            </div>
-          )}
         </motion.div>
 
         {/* Terms checkbox */}
