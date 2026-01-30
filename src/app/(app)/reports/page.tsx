@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [birthChartTimerActive, setBirthChartTimerActive] = useState(false);
   const [birthChartTimerStartedAt, setBirthChartTimerStartedAt] = useState<string | null>(null);
+  const [birthChartTimerExpired, setBirthChartTimerExpired] = useState(false);
 
   // Get ascendant sign from onboarding store as fallback
   const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, ascendantSign: storeAscendantSign } = useOnboardingStore();
@@ -364,55 +365,85 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Birth Chart Report */}
-                <div 
-                  onClick={() => {
-                    if (unlockedFeatures.birthChart) {
-                      if (!birthChartGenerating) {
-                        router.push("/birth-chart");
+                <div className="space-y-0">
+                  <div 
+                    onClick={async () => {
+                      // Don't allow click if timer is active and not expired
+                      if (birthChartTimerActive && !birthChartTimerExpired) {
+                        return;
                       }
-                    } else {
-                      setUpsellPopup({ isOpen: true, feature: "birthChart" });
-                    }
-                  }}
-                  className="bg-[#1A2235] rounded-2xl border border-primary/20 p-3 cursor-pointer hover:border-primary/40 transition-colors relative"
-                >
-                  {!unlockedFeatures.birthChart && (
-                    <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
-                      <Lock className="w-3 h-3 text-white/60" />
+                      if (unlockedFeatures.birthChart) {
+                        if (!birthChartGenerating) {
+                          // Deactivate timer when user opens the report
+                          if (birthChartTimerActive) {
+                            setBirthChartTimerActive(false);
+                            // Update Firebase to deactivate timer
+                            const userId = localStorage.getItem("palmcosmic_user_id");
+                            if (userId) {
+                              try {
+                                const { doc, updateDoc } = await import("firebase/firestore");
+                                await updateDoc(doc(db, "users", userId), {
+                                  birthChartTimerActive: false,
+                                });
+                              } catch (err) {
+                                console.error("Failed to deactivate timer:", err);
+                              }
+                            }
+                          }
+                          router.push("/birth-chart");
+                        }
+                      } else {
+                        setUpsellPopup({ isOpen: true, feature: "birthChart" });
+                      }
+                    }}
+                    className={`bg-[#1A2235] border border-primary/20 p-3 transition-colors relative ${
+                      birthChartTimerActive && !birthChartTimerExpired 
+                        ? "rounded-t-2xl cursor-not-allowed opacity-70" 
+                        : "rounded-2xl cursor-pointer hover:border-primary/40"
+                    }`}
+                  >
+                    {!unlockedFeatures.birthChart && (
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+                        <Lock className="w-3 h-3 text-white/60" />
+                      </div>
+                    )}
+                    {birthChartGenerating && (
+                      <div className="absolute top-2 right-2">
+                        <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-orange-500/30 to-amber-600/30 flex items-center justify-center flex-shrink-0 overflow-hidden border border-white/10">
+                        <span className="text-3xl">📊</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-white font-semibold">Birth Chart Report</h3>
+                        <p className="text-white/50 text-xs mt-0.5">Your complete astrological blueprint</p>
+                        {!unlockedFeatures.birthChart && (
+                          <button className="mt-1 px-3 py-1 bg-primary/20 text-primary text-xs rounded-full">
+                            Get Report
+                          </button>
+                        )}
+                        {birthChartGenerating && (
+                          <p className="text-white/50 text-xs mt-1">Generating your chart...</p>
+                        )}
+                      </div>
+                      <ChevronRight className="w-6 h-6 text-white/40" />
                     </div>
-                  )}
-                  {birthChartGenerating && (
-                    <div className="absolute top-2 right-2">
-                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                    </div>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-orange-500/30 to-amber-600/30 flex items-center justify-center flex-shrink-0 overflow-hidden border border-white/10">
-                      <span className="text-3xl">📊</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-white font-semibold">Birth Chart Report</h3>
-                      <p className="text-white/50 text-xs mt-0.5">Your complete astrological blueprint</p>
-                      {!unlockedFeatures.birthChart && (
-                        <button className="mt-1 px-3 py-1 bg-primary/20 text-primary text-xs rounded-full">
-                          Get Report
-                        </button>
-                      )}
-                      {unlockedFeatures.birthChart && birthChartTimerActive && (
-                        <div className="mt-1 flex items-center gap-2">
-                          <span className="text-white/50 text-xs">Ready in:</span>
-                          <BirthChartTimer 
-                            startedAt={birthChartTimerStartedAt} 
-                            isActive={birthChartTimerActive} 
-                          />
-                        </div>
-                      )}
-                      {birthChartGenerating && (
-                        <p className="text-white/50 text-xs mt-1">Generating your chart...</p>
-                      )}
-                    </div>
-                    <ChevronRight className="w-6 h-6 text-white/40" />
                   </div>
+                  {/* Timer Bar */}
+                  {unlockedFeatures.birthChart && birthChartTimerActive && (
+                    <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-b-2xl px-4 py-2 flex items-center justify-center gap-2 border-x border-b border-amber-500/30">
+                      <BirthChartTimer 
+                        startedAt={birthChartTimerStartedAt} 
+                        isActive={birthChartTimerActive}
+                        onExpire={() => setBirthChartTimerExpired(true)}
+                      />
+                      {!birthChartTimerExpired && (
+                        <span className="text-amber-400/80 text-xs">until your report is ready</span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Compatibility Test */}

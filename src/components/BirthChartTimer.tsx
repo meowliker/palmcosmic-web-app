@@ -7,9 +7,10 @@ interface BirthChartTimerProps {
   startedAt: string | null;
   isActive: boolean;
   className?: string;
+  onExpire?: () => void;
 }
 
-export function BirthChartTimer({ startedAt, isActive, className = "" }: BirthChartTimerProps) {
+export function BirthChartTimer({ startedAt, isActive, className = "", onExpire }: BirthChartTimerProps) {
   const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
   const [isExpired, setIsExpired] = useState(false);
 
@@ -26,8 +27,11 @@ export function BirthChartTimer({ startedAt, isActive, className = "" }: BirthCh
       const diff = endTime - now;
 
       if (diff <= 0) {
-        setIsExpired(true);
-        setTimeLeft(null);
+        if (!isExpired) {
+          setIsExpired(true);
+          setTimeLeft(null);
+          onExpire?.();
+        }
         return;
       }
 
@@ -43,7 +47,7 @@ export function BirthChartTimer({ startedAt, isActive, className = "" }: BirthCh
     const interval = setInterval(calculateTimeLeft, 1000);
 
     return () => clearInterval(interval);
-  }, [startedAt, isActive]);
+  }, [startedAt, isActive, isExpired, onExpire]);
 
   if (!isActive || !startedAt) {
     return null;
