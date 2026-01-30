@@ -186,6 +186,27 @@ export async function POST(request: NextRequest) {
             },
             { merge: true }
           );
+          
+          // Update lead document with subscription status
+          if (customerEmail) {
+            try {
+              const leadsQuery = await adminDb
+                .collection("leads")
+                .where("email", "==", customerEmail)
+                .orderBy("createdAt", "desc")
+                .limit(1)
+                .get();
+              
+              if (!leadsQuery.empty) {
+                await leadsQuery.docs[0].ref.update({
+                  subscriptionStatus: plan || "subscribed",
+                  subscribedAt: now,
+                });
+              }
+            } catch (leadErr) {
+              console.error("Failed to update lead subscription status:", leadErr);
+            }
+          }
           if (coinsToAdd > 0) {
             await userRef.set(
               {

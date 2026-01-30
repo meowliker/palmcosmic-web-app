@@ -158,9 +158,8 @@ export default function DashboardPage() {
                   <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-400 rounded-full border-2 border-[#0A0E1A]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-bold text-xl mb-1 flex items-center gap-2">
+                  <h3 className="text-white font-bold text-xl mb-1">
                     Chat with Elysia
-                    <span className="text-xs font-normal px-2 py-0.5 bg-purple-500/30 text-purple-300 rounded-full">AI</span>
                   </h3>
                   <p className="text-purple-200/80 text-sm">
                     Your personal cosmic guide & advisor

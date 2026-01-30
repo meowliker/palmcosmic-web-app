@@ -8,6 +8,10 @@ import { useRouter } from "next/navigation";
 import { Shield } from "lucide-react";
 import { useHaptic } from "@/hooks/useHaptic";
 import { pixelEvents } from "@/lib/pixel-events";
+import { useOnboardingStore } from "@/lib/onboarding-store";
+import { db } from "@/lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
+import { generateUserId } from "@/lib/user-profile";
 
 // Generate random stats with some variation for authenticity
 function generateRandomStats() {
@@ -29,6 +33,10 @@ export default function Step15Page() {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [palmImage, setPalmImage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Get user data from onboarding store
+  const { gender, birthYear, relationshipStatus, goals } = useOnboardingStore();
 
   // Generate random stats once on mount
   const readingStats = useMemo(() => generateRandomStats(), []);
@@ -48,7 +56,7 @@ export default function Step15Page() {
   };
 
   const { triggerLight } = useHaptic();
-  const handleContinue = () => {
+  const handleContinue = async () => {
     triggerLight();
     const trimmed = email.trim();
 
@@ -59,11 +67,45 @@ export default function Step15Page() {
 
     setEmailError(null);
 
-    // Store email if provided
+    // Store email if provided and save to Firebase
     if (trimmed.length > 0) {
       localStorage.setItem("palmcosmic_email", trimmed);
       // Track AddToWishlist when user provides email
       pixelEvents.addToWishlist("Personalized Palm Reading Report");
+      
+      // Save lead data to Firebase
+      setIsSaving(true);
+      try {
+        const userId = generateUserId();
+        const currentYear = new Date().getFullYear();
+        const age = birthYear ? currentYear - parseInt(birthYear) : null;
+        
+        await setDoc(doc(db, "leads", `lead_${Date.now()}_${userId.slice(-6)}`), {
+          email: trimmed,
+          gender: gender || "not specified",
+          age: age,
+          relationshipStatus: relationshipStatus || "not specified",
+          goals: goals || [],
+          subscriptionStatus: "no",
+          userId: userId,
+          createdAt: new Date().toISOString(),
+          source: "onboarding_step_15",
+        });
+        
+        // Also update the user document with email
+        await setDoc(doc(db, "users", userId), {
+          email: trimmed,
+          gender: gender || null,
+          age: age,
+          relationshipStatus: relationshipStatus || null,
+          goals: goals || [],
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      } catch (err) {
+        console.error("Failed to save lead data:", err);
+      } finally {
+        setIsSaving(false);
+      }
     }
     router.push("/onboarding/step-16");
   };
