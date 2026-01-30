@@ -10,6 +10,7 @@ import { getZodiacSign, getZodiacSymbol, getZodiacColor } from "@/lib/astrology-
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { UserAvatar, getUserDisplayName } from "@/components/UserAvatar";
 
 // Zodiac symbols mapping
 const zodiacSymbols: Record<string, string> = {
@@ -60,6 +61,8 @@ export default function ProfilePage() {
     sunSign: string;
     moonSign: string;
     ascendantSign: string;
+    name?: string;
+    email?: string;
   } | null>(null);
   
   const { 
@@ -151,6 +154,9 @@ export default function ProfilePage() {
             }
           }
 
+          // Get email from Firebase or localStorage
+          const email = data.email || localStorage.getItem("palmcosmic_email") || undefined;
+          
           setUserData({
             birthMonth: month,
             birthDay: day,
@@ -161,6 +167,8 @@ export default function ProfilePage() {
             sunSign: extractSignName(data.sunSign) || calculatedSunSign,
             moonSign: moonSignValue || "Cancer",
             ascendantSign: ascendantValue || "Leo",
+            name: data.name || undefined,
+            email: email,
           });
           setIsLoading(false);
           return;
@@ -169,6 +177,7 @@ export default function ProfilePage() {
 
       // Fallback to onboarding store
       if (storeBirthMonth && storeBirthDay) {
+        const storedEmail = localStorage.getItem("palmcosmic_email") || undefined;
         setUserData({
           birthMonth: storeBirthMonth,
           birthDay: storeBirthDay,
@@ -179,6 +188,7 @@ export default function ProfilePage() {
           sunSign: getZodiacSign(Number(storeBirthMonth), Number(storeBirthDay)),
           moonSign: storeMoonSign?.name || "Cancer",
           ascendantSign: storeAscendantSign?.name || "Leo",
+          email: storedEmail,
         });
       }
     } catch (error) {
@@ -268,11 +278,9 @@ export default function ProfilePage() {
               className="flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-full bg-[#1A2235] flex items-center justify-center border border-white/20">
-                  <User className="w-7 h-7 text-white/50" />
-                </div>
+                <UserAvatar name={userData?.name} email={userData?.email} size="lg" className="w-14 h-14 text-xl" />
                 <div>
-                  <h2 className="text-white text-lg font-semibold">You</h2>
+                  <h2 className="text-white text-lg font-semibold">{getUserDisplayName(userData?.name, userData?.email)}</h2>
                   <p className="text-white/50 text-sm">{formatBirthDateTime()}</p>
                 </div>
               </div>

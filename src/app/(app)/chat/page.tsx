@@ -79,6 +79,7 @@ export default function ChatPage() {
   const [purchasingPackage, setPurchasingPackage] = useState<number | null>(null);
   const [palmReading, setPalmReading] = useState<any>(null);
   const [chatLoaded, setChatLoaded] = useState(false);
+  const [showLowBalanceBubble, setShowLowBalanceBubble] = useState(false);
 
   // Get coins from user store
   const { coins, deductCoins } = useUserStore();
@@ -203,6 +204,13 @@ export default function ChatPage() {
 
     loadData();
   }, [gender, ascendantSign]);
+
+  // Show low balance bubble when coins < 3
+  useEffect(() => {
+    if (coins < 3) {
+      setShowLowBalanceBubble(true);
+    }
+  }, [coins]);
 
   // Save chat messages to Firebase whenever they change
   useEffect(() => {
@@ -408,6 +416,43 @@ export default function ChatPage() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Low Balance Bubble */}
+      <AnimatePresence>
+        {showLowBalanceBubble && coins < 3 && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="mx-4 mt-2"
+          >
+            <div className="bg-[#1A2332] rounded-2xl p-4 flex items-center gap-3 border border-white/10 shadow-lg">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center flex-shrink-0">
+                <Coins className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="text-white font-medium text-sm">You're running out of balance</p>
+                <p className="text-white/60 text-xs">Refill to continue chatting.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowLowBalanceBubble(false);
+                  setShowPricing(true);
+                }}
+                className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white text-sm font-medium rounded-full transition-colors"
+              >
+                Refill
+              </button>
+              <button
+                onClick={() => setShowLowBalanceBubble(false)}
+                className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4 text-white/60" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">

@@ -11,6 +11,7 @@ import { UpsellPopup } from "@/components/UpsellPopup";
 import { TrialStatusBanner } from "@/components/TrialStatusBanner";
 import { doc, getDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
+import { UserAvatar } from "@/components/UserAvatar";
 
 interface DailyData {
   sunRiseSet?: { sunrise: string; sunset: string };
@@ -28,6 +29,8 @@ export default function DashboardPage() {
     isOpen: false,
     feature: null,
   });
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Get ascendant sign from onboarding store as fallback
   const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, ascendantSign: storeAscendantSign } = useOnboardingStore();
@@ -54,6 +57,11 @@ export default function DashboardPage() {
 
         if (userSnap.exists()) {
           const data = userSnap.data();
+          
+          // Load user name and email for avatar
+          if (data.name) setUserName(data.name);
+          if (data.email) setUserEmail(data.email);
+          
           // Use ascendant sign for daily horoscope
           if (data.ascendantSign) {
             // Handle both object and string formats
@@ -66,10 +74,15 @@ export default function DashboardPage() {
                 symbol: getZodiacSymbol(signName),
                 color: getZodiacColor(signName),
               });
-              return;
             }
           }
         }
+      }
+      
+      // Also try to get email from localStorage as fallback
+      const storedEmail = localStorage.getItem("palmcosmic_email");
+      if (storedEmail && !userEmail) {
+        setUserEmail(storedEmail);
       }
 
       // Fallback to onboarding store ascendant sign
@@ -121,9 +134,9 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between px-4 py-3">
             <button
               onClick={() => router.push("/profile")}
-              className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center border border-white/20 hover:border-primary/50 transition-colors"
+              className="hover:opacity-80 transition-opacity"
             >
-              <span className="text-white text-sm font-medium">U</span>
+              <UserAvatar name={userName} email={userEmail} size="md" />
             </button>
             <h1 className="text-white text-xl font-semibold">Dashboard</h1>
             <div className="w-10" />
