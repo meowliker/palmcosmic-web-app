@@ -162,7 +162,7 @@ export default function Step15Page() {
         setIsSaving(false);
       }
     }
-    router.push("/onboarding/step-16");
+    router.push("/onboarding/step-17");
   };
 
   return (

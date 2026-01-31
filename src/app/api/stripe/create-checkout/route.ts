@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Use subscription mode with trial period and upfront trial fee
-      // This creates the subscription atomically with payment - no webhook needed
+      // The add_invoice_items will charge the trial fee immediately
       sessionParams = {
         mode: "subscription",
         payment_method_types: ["card"],
@@ -87,13 +87,15 @@ export async function POST(request: NextRequest) {
             userId: userId || "",
             plan,
           },
-          // Add upfront trial fee as invoice item
+          // Add the one-time trial fee to the first invoice
           add_invoice_items: [
             {
               price: trialPriceId,
             },
           ],
         },
+        // Critical: Force customer creation instead of guest checkout
+        customer_creation: "always",
         success_url: `${baseUrl}/onboarding/step-18?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/onboarding/step-17`,
         metadata: {
