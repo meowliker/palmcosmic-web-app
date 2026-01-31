@@ -314,6 +314,9 @@ export default function Step17Page() {
     const planPrice = plan === "1week" ? 1 : plan === "2week" ? 5.49 : 9.99;
     const planName = `${plan} Trial`;
     
+    // Save selected plan to localStorage for Purchase tracking on success page
+    localStorage.setItem("palmcosmic_selected_plan", plan);
+    
     // Track AddToCart when user clicks "Start Trial"
     pixelEvents.addToCart(planPrice, planName);
     pixelEvents.startTrial(planPrice);
@@ -335,6 +338,8 @@ export default function Step17Page() {
       if (data.url) {
         // Track InitiateCheckout before redirecting to Stripe
         pixelEvents.initiateCheckout(planPrice, [planName]);
+        // Track AddPaymentInfo - user is entering payment flow
+        pixelEvents.addPaymentInfo(planPrice, planName);
         // Redirect to Stripe Checkout
         window.location.href = data.url;
       } else if (data.error) {

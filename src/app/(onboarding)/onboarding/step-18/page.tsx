@@ -72,9 +72,21 @@ function Step18Content() {
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (sessionId) {
-      // Track subscription purchase with Meta Pixel
-      // Default to monthly plan value, actual value comes from Stripe webhook
-      pixelEvents.subscribe(9.99, "PalmCosmic Subscription");
+      // Get the plan from localStorage to determine correct purchase value
+      const selectedPlan = localStorage.getItem("palmcosmic_selected_plan") || "2week";
+      const planPrices: Record<string, number> = {
+        "1week": 1.00,
+        "2week": 5.49,
+        "4week": 9.99,
+      };
+      const purchaseValue = planPrices[selectedPlan] || 5.49;
+      const planName = `${selectedPlan} Trial`;
+      
+      // Track PURCHASE event - Critical for Meta ROAS tracking
+      pixelEvents.purchase(purchaseValue, `subscription-${selectedPlan}`, planName);
+      
+      // Also track Subscribe event for additional tracking
+      pixelEvents.subscribe(purchaseValue, planName);
       
       // User just completed payment - analyze palm and add coins
       analyzePalmAfterPayment();
@@ -223,6 +235,14 @@ function Step18Content() {
       const data = await response.json();
 
       if (data.url) {
+        // Calculate upsell value for pixel tracking
+        const upsellValue = selectedOffers.has("ultra-pack") ? 9.99 : selectedOffers.size * 6.99;
+        const offerNames = Array.from(selectedOffers).join(", ");
+        
+        // Track pixel events for upsell checkout
+        pixelEvents.initiateCheckout(upsellValue, Array.from(selectedOffers));
+        pixelEvents.addPaymentInfo(upsellValue, `Upsell: ${offerNames}`);
+        
         // Redirect to Stripe Checkout
         window.location.href = data.url;
       } else if (data.error) {

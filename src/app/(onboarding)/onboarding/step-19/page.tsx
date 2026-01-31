@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ import { auth, db } from "@/lib/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { useHaptic } from "@/hooks/useHaptic";
 import { pixelEvents } from "@/lib/pixel-events";
+import { useSearchParams } from "next/navigation";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -40,7 +41,7 @@ const validatePassword = (password: string): { valid: boolean; message: string }
   return { valid: true, message: "" };
 };
 
-export default function Step19Page() {
+function Step19Content() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,6 +53,7 @@ export default function Step19Page() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const onboardingData = useOnboardingStore();
+  const searchParams = useSearchParams();
 
   // Get stored email from previous step
   useEffect(() => {
@@ -60,6 +62,23 @@ export default function Step19Page() {
       setEmail(storedEmail);
     }
   }, []);
+
+  // Track Purchase event for upsell purchases
+  useEffect(() => {
+    const upsellSuccess = searchParams.get("upsell_success");
+    const offers = searchParams.get("offers");
+    const sessionId = searchParams.get("session_id");
+    
+    if (upsellSuccess === "true" && offers && sessionId) {
+      // Calculate upsell value based on offers
+      const offerList = offers.split(",");
+      const hasUltraPack = offerList.includes("ultra-pack");
+      const upsellValue = hasUltraPack ? 9.99 : offerList.length * 6.99;
+      
+      // Track PURCHASE event for upsell - Critical for Meta ROAS tracking
+      pixelEvents.purchase(upsellValue, `upsell-${offers}`, `Upsell: ${offers}`);
+    }
+  }, [searchParams]);
 
   const handleSignUp = async () => {
     if (!email || !password || password !== confirmPassword) {
@@ -447,5 +466,13 @@ export default function Step19Page() {
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+export default function Step19Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <Step19Content />
+    </Suspense>
   );
 }

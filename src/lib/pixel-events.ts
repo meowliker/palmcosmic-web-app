@@ -88,6 +88,15 @@ export const pixelEvents = {
       num_items: items.length
     }),
   
+  /** User adds payment info (redirected to Stripe checkout) */
+  addPaymentInfo: (value: number, contentName: string) => 
+    trackPixelEvent("AddPaymentInfo", { 
+      value, 
+      currency: "USD",
+      content_name: contentName,
+      content_category: "Subscription"
+    }),
+  
   /** User completes a purchase */
   purchase: (value: number, productId: string, productName: string) => 
     trackPixelEvent("Purchase", { 
