@@ -83,23 +83,37 @@ export async function GET(request: NextRequest) {
       })
       .reduce((sum, p) => sum + getAmount(p), 0);
     
-    // MRR calculation (active subscriptions including trialing)
-    const activeSubscribers = users.filter(u => 
-      (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled
+    // MRR calculation - only count ACTIVE (paying) subscribers, not trialing
+    // Trialing users haven't converted yet, so they shouldn't inflate MRR
+    const activePayingSubscribers = users.filter(u => 
+      u.subscriptionStatus === "active" && !u.subscriptionCancelled
     );
     
-    const mrr = activeSubscribers.reduce((sum, u) => {
+    const trialingSubscribers = users.filter(u => 
+      u.subscriptionStatus === "trialing" && !u.subscriptionCancelled
+    );
+    
+    // Calculate MRR from actual paying subscribers only
+    const mrr = activePayingSubscribers.reduce((sum, u) => {
       // Legacy plans
       if (u.subscriptionPlan === "weekly") return sum + (4.99 * 4); // Weekly to monthly
       if (u.subscriptionPlan === "monthly") return sum + 9.99;
       if (u.subscriptionPlan === "yearly") return sum + (49.99 / 12);
       // New trial plans (after trial, they pay recurring)
-      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * 2); // 2-week plan to monthly
+      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * 2); // 2-week plan = $19.99 bi-weekly = ~$39.98/month
       if (u.subscriptionPlan === "4week") return sum + 29.99; // Monthly plan
       return sum;
     }, 0);
     
+    // Projected MRR includes trialing users (if they all convert)
+    const projectedMrr = trialingSubscribers.reduce((sum, u) => {
+      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * 2);
+      if (u.subscriptionPlan === "4week") return sum + 29.99;
+      return sum;
+    }, mrr);
+    
     const arr = mrr * 12;
+    const projectedArr = projectedMrr * 12;
     
     // Revenue growth rate
     const momGrowth = revenueLastMonth > 0 
@@ -116,16 +130,16 @@ export async function GET(request: NextRequest) {
       "4week": payments.filter(p => p.plan === "4week").reduce((sum, p) => sum + getAmount(p), 0),
     };
     
-    // Revenue by type (trial_subscription counts as subscription)
+    // Revenue by type (trial_subscription and trial_payment count as subscription)
     const revenueByType = {
-      subscription: payments.filter(p => p.type === "subscription" || p.type === "trial_subscription" || !p.type).reduce((sum, p) => sum + getAmount(p), 0),
+      subscription: payments.filter(p => p.type === "subscription" || p.type === "trial_subscription" || p.type === "trial_payment" || !p.type).reduce((sum, p) => sum + getAmount(p), 0),
       coins: payments.filter(p => p.type === "coins").reduce((sum, p) => sum + getAmount(p), 0),
       reports: payments.filter(p => p.type === "report").reduce((sum, p) => sum + getAmount(p), 0),
       upsells: payments.filter(p => p.type === "upsell").reduce((sum, p) => sum + getAmount(p), 0),
     };
     
-    // Subscriber counts
-    const totalActiveSubscribers = activeSubscribers.length;
+    // Subscriber counts (includes both paying and trialing)
+    const totalActiveSubscribers = activePayingSubscribers.length + trialingSubscribers.length;
     const newSubscribersThisMonth = users.filter(u => {
       const startedAt = u.subscriptionStartedAt ? new Date(u.subscriptionStartedAt) : null;
       return startedAt && startedAt >= startOfMonth && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing");
@@ -227,6 +241,10 @@ export async function GET(request: NextRequest) {
       // Primary KPIs
       mrr: mrr.toFixed(2),
       arr: arr.toFixed(2),
+      projectedMrr: projectedMrr.toFixed(2),
+      projectedArr: projectedArr.toFixed(2),
+      activePayingSubscribers: activePayingSubscribers.length,
+      trialingSubscribers: trialingSubscribers.length,
       totalRevenue: totalRevenue.toFixed(2),
       revenueToday: revenueToday.toFixed(2),
       revenueThisWeek: revenueThisWeek.toFixed(2),

@@ -34,6 +34,10 @@ import {
 interface RevenueData {
   mrr: string;
   arr: string;
+  projectedMrr?: string;
+  projectedArr?: string;
+  activePayingSubscribers?: number;
+  trialingSubscribers?: number;
   totalRevenue: string;
   revenueToday: string;
   revenueThisWeek: string;
@@ -524,14 +528,18 @@ export default function AdminRevenuePage() {
             <KPICard
               title="MRR"
               value={formatCurrency(data.mrr)}
-              subtitle="Monthly Recurring"
+              subtitle={data.projectedMrr && parseFloat(data.projectedMrr) > parseFloat(data.mrr) 
+                ? `Projected: ${formatCurrency(data.projectedMrr)}` 
+                : "Monthly Recurring"}
               icon={<TrendingUp className="w-4 h-4" />}
               color="text-green-400"
             />
             <KPICard
               title="ARR"
               value={formatCurrency(data.arr)}
-              subtitle="Annual Recurring"
+              subtitle={data.projectedArr && parseFloat(data.projectedArr) > parseFloat(data.arr)
+                ? `Projected: ${formatCurrency(data.projectedArr)}`
+                : "Annual Recurring"}
               icon={<TrendingUp className="w-4 h-4" />}
               color="text-blue-400"
             />
