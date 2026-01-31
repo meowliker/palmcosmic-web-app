@@ -186,42 +186,18 @@ export async function POST(request: NextRequest) {
             await userRef.set(updateData, { merge: true });
           }
         } else if (type === "trial_subscription") {
-          // New trial-based subscription: payment was for trial fee
-          // Now create the actual subscription with trial period
-          const { subscriptionPriceId, trialDays } = session.metadata || {};
+          // New trial-based subscription: subscription is created atomically by Stripe
+          // Just need to get subscription ID from session and update user
+          const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
           const customerId = typeof session.customer === "string" ? session.customer : null;
           
-          console.log("Trial subscription payment completed, creating subscription...");
-          console.log("Customer ID:", customerId, "Price ID:", subscriptionPriceId, "Trial Days:", trialDays);
+          console.log("Trial subscription checkout completed");
+          console.log("Subscription ID:", subscriptionId, "Customer ID:", customerId);
           
-          // Get the payment method from the payment intent
-          let paymentMethodId: string | null = null;
-          if (session.payment_intent) {
+          if (subscriptionId) {
             try {
-              const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string);
-              paymentMethodId = typeof paymentIntent.payment_method === "string" 
-                ? paymentIntent.payment_method 
-                : null;
-            } catch (pmErr) {
-              console.error("Failed to retrieve payment method:", pmErr);
-            }
-          }
-          
-          if (subscriptionPriceId && customerId && paymentMethodId) {
-            try {
-              // Create the subscription with trial period
-              const subscription = await stripe.subscriptions.create({
-                customer: customerId,
-                items: [{ price: subscriptionPriceId }],
-                trial_period_days: parseInt(trialDays || "7", 10),
-                default_payment_method: paymentMethodId,
-                metadata: {
-                  userId: resolvedUserId,
-                  plan: plan || "",
-                },
-              });
-              
-              console.log("Subscription created:", subscription.id);
+              // Retrieve subscription to get trial end date
+              const subscription = await stripe.subscriptions.retrieve(subscriptionId);
               
               // Update user with subscription info
               const coinsToAdd = getPlanCoins(plan || null);
@@ -272,35 +248,10 @@ export async function POST(request: NextRequest) {
                 }
               }
             } catch (subErr) {
-              console.error("Failed to create subscription after trial payment:", subErr);
-              // Still mark user as having paid for trial
-              await userRef.set(
-                {
-                  trialPaymentCompleted: true,
-                  trialPaymentPlan: plan || null,
-                  subscriptionPriceId: subscriptionPriceId,
-                  stripeCustomerId: customerId,
-                  updatedAt: now,
-                },
-                { merge: true }
-              );
+              console.error("Failed to retrieve subscription:", subErr);
             }
           } else {
-            console.log("Missing required data for subscription creation:", {
-              hasSubscriptionPriceId: !!subscriptionPriceId,
-              hasCustomerId: !!customerId,
-              hasPaymentMethodId: !!paymentMethodId,
-            });
-            // Mark trial payment as completed for manual follow-up
-            await userRef.set(
-              {
-                trialPaymentCompleted: true,
-                trialPaymentPlan: plan || null,
-                stripeCustomerId: customerId,
-                updatedAt: now,
-              },
-              { merge: true }
-            );
+            console.log("No subscription ID found in session");
           }
         } else {
           const coinsToAdd = getPlanCoins(plan || null);
