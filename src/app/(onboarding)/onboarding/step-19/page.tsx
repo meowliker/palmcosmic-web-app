@@ -132,57 +132,42 @@ function Step19Content() {
         console.error("Failed to set session:", err);
       }
 
-      await setDoc(
-        doc(db, "users", uid),
-        {
-          email: email.toLowerCase(),
-          subscriptionPlan: null,
-          subscriptionStatus: "none",
-          coins: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      // IMPORTANT: Migrate data from anonymous user FIRST before creating new user doc
+      // This preserves subscription data set by the Stripe webhook
+      let migratedPlan: string | null = null;
+      let migratedStatus: string = "none";
+      let migratedCoins: number = 0;
+      let migratedUnlocked: Record<string, boolean> = {};
+      let migratedStripeCustomerId: string | null = null;
+      let migratedStripeSubscriptionId: string | null = null;
+      let migratedTrialEndsAt: string | null = null;
 
       if (anonId && anonId !== uid) {
         try {
           const anonUserSnap = await getDoc(doc(db, "users", anonId));
-          const uidUserSnap = await getDoc(doc(db, "users", uid));
           if (anonUserSnap.exists()) {
             const anonData: any = anonUserSnap.data();
-            const uidData: any = uidUserSnap.exists() ? uidUserSnap.data() : {};
-
-            const mergedUnlocked = {
-              ...(uidData.unlockedFeatures || {}),
-              ...(anonData.unlockedFeatures || {}),
-            };
-
-            const mergedCoins = (uidData.coins || 0) + (anonData.coins || 0);
-            const mergedPlan = uidData.subscriptionPlan || anonData.subscriptionPlan || null;
-            const mergedStatus = uidData.subscriptionStatus || anonData.subscriptionStatus || "none";
-
-            await setDoc(
-              doc(db, "users", uid),
-              {
-                coins: mergedCoins,
-                subscriptionPlan: mergedPlan,
-                subscriptionStatus: mergedStatus,
-                unlockedFeatures: mergedUnlocked,
-                updatedAt: new Date().toISOString(),
-              },
-              { merge: true }
-            );
+            migratedPlan = anonData.subscriptionPlan || null;
+            migratedStatus = anonData.subscriptionStatus || "none";
+            migratedCoins = anonData.coins || 0;
+            migratedUnlocked = anonData.unlockedFeatures || {};
+            migratedStripeCustomerId = anonData.stripeCustomerId || null;
+            migratedStripeSubscriptionId = anonData.stripeSubscriptionId || null;
+            migratedTrialEndsAt = anonData.trialEndsAt || null;
+            
+            console.log("Migrating from anon user:", anonId, "Plan:", migratedPlan, "Status:", migratedStatus);
           }
         } catch (err) {
-          console.error("Failed to migrate anon entitlements:", err);
+          console.error("Failed to read anon user data:", err);
         }
 
+        // Migrate other collections
         const migrateDoc = async (collectionName: string) => {
           try {
             const oldSnap = await getDoc(doc(db, collectionName, anonId));
             if (!oldSnap.exists()) return;
             await setDoc(doc(db, collectionName, uid), oldSnap.data(), { merge: true });
+            console.log(`Migrated ${collectionName} from ${anonId} to ${uid}`);
           } catch (err) {
             console.error(`Failed to migrate ${collectionName}:`, err);
           }
@@ -192,6 +177,27 @@ function Step19Content() {
         await migrateDoc("palm_readings");
         await migrateDoc("chat_messages");
       }
+
+      // Now create/update the user document with migrated data
+      // Only set defaults if no migrated data exists
+      const userData: Record<string, any> = {
+        email: email.toLowerCase(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Preserve subscription data from migration (set by webhook on anon user)
+      if (migratedPlan) userData.subscriptionPlan = migratedPlan;
+      if (migratedStatus !== "none") userData.subscriptionStatus = migratedStatus;
+      if (migratedCoins > 0) userData.coins = migratedCoins;
+      if (Object.keys(migratedUnlocked).length > 0) userData.unlockedFeatures = migratedUnlocked;
+      if (migratedStripeCustomerId) userData.stripeCustomerId = migratedStripeCustomerId;
+      if (migratedStripeSubscriptionId) userData.stripeSubscriptionId = migratedStripeSubscriptionId;
+      if (migratedTrialEndsAt) userData.trialEndsAt = migratedTrialEndsAt;
+
+      await setDoc(doc(db, "users", uid), userData, { merge: true });
+      
+      console.log("User document created/updated:", uid, "with subscription:", migratedPlan, migratedStatus);
 
       const palmImage = localStorage.getItem("palmcosmic_palm_image");
 

@@ -12,7 +12,10 @@ declare global {
  */
 export const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
   if (typeof window !== "undefined" && window.fbq) {
+    console.log(`[Meta Pixel] Tracking: ${eventName}`, params);
     window.fbq("track", eventName, params);
+  } else {
+    console.warn(`[Meta Pixel] fbq not available for event: ${eventName}`);
   }
 };
 

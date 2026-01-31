@@ -97,25 +97,33 @@ function Step18Content() {
     }
   }, [searchParams, router]);
 
-  // Trigger palm reading analysis after successful payment
+  // Trigger palm reading analysis and Purchase pixel after successful payment
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (sessionId) {
-      // Get the plan from localStorage to determine correct purchase value
-      const selectedPlan = localStorage.getItem("palmcosmic_selected_plan") || "2week";
-      const planPrices: Record<string, number> = {
-        "1week": 1.00,
-        "2week": 5.49,
-        "4week": 9.99,
-      };
-      const purchaseValue = planPrices[selectedPlan] || 5.49;
-      const planName = `${selectedPlan} Trial`;
-      
-      // Track PURCHASE event - Critical for Meta ROAS tracking
-      pixelEvents.purchase(purchaseValue, `subscription-${selectedPlan}`, planName);
-      
-      // Also track Subscribe event for additional tracking
-      pixelEvents.subscribe(purchaseValue, planName);
+      // Prevent duplicate Purchase events by checking if already tracked for this session
+      const trackedSessionId = localStorage.getItem("palmcosmic_tracked_purchase_session");
+      if (trackedSessionId !== sessionId) {
+        // Get the plan from localStorage to determine correct purchase value
+        const selectedPlan = localStorage.getItem("palmcosmic_selected_plan") || "2week";
+        const planPrices: Record<string, number> = {
+          "1week": 1.00,
+          "2week": 5.49,
+          "4week": 9.99,
+        };
+        const purchaseValue = planPrices[selectedPlan] || 5.49;
+        const planName = `${selectedPlan} Trial`;
+        
+        // Track PURCHASE event - Critical for Meta ROAS tracking
+        console.log("[Meta Pixel] Firing Purchase event:", { value: purchaseValue, plan: planName });
+        pixelEvents.purchase(purchaseValue, `subscription-${selectedPlan}`, planName);
+        
+        // Also track Subscribe event for additional tracking
+        pixelEvents.subscribe(purchaseValue, planName);
+        
+        // Mark this session as tracked to prevent duplicates
+        localStorage.setItem("palmcosmic_tracked_purchase_session", sessionId);
+      }
       
       // User just completed payment - analyze palm and add coins
       analyzePalmAfterPayment();
