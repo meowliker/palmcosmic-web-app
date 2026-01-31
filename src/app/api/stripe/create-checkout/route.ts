@@ -70,29 +70,22 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Use subscription mode with trial period and upfront trial fee
-      // The add_invoice_items will charge the trial fee immediately
+      // Use payment mode for the trial fee (one-time charge)
+      // After successful payment, we'll create the subscription via webhook
+      // This ensures the trial fee is charged immediately
       sessionParams = {
-        mode: "subscription",
+        mode: "payment",
         payment_method_types: ["card"],
         line_items: [
           {
-            price: subscriptionPriceId,
+            // One-time trial fee (charged immediately)
+            price: trialPriceId,
             quantity: 1,
           },
         ],
-        subscription_data: {
-          trial_period_days: TRIAL_DAYS[plan],
-          metadata: {
-            userId: userId || "",
-            plan,
-          },
-          // Add the one-time trial fee to the first invoice
-          add_invoice_items: [
-            {
-              price: trialPriceId,
-            },
-          ],
+        // Save payment method for future subscription charges
+        payment_intent_data: {
+          setup_future_usage: "off_session",
         },
         // Critical: Force customer creation instead of guest checkout
         customer_creation: "always",
@@ -101,7 +94,9 @@ export async function POST(request: NextRequest) {
         metadata: {
           userId: userId || "",
           plan,
-          type: "trial_subscription",
+          type: "trial_payment",
+          subscriptionPriceId: subscriptionPriceId,
+          trialDays: String(TRIAL_DAYS[plan]),
         },
       };
     } else {

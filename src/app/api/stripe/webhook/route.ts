@@ -185,9 +185,85 @@ export async function POST(request: NextRequest) {
             
             await userRef.set(updateData, { merge: true });
           }
+        } else if (type === "trial_payment") {
+          // Trial fee payment completed - now create the subscription with trial period
+          const customerId = typeof session.customer === "string" ? session.customer : null;
+          const { subscriptionPriceId, trialDays } = session.metadata || {};
+          
+          console.log("Trial payment completed - creating subscription");
+          console.log("Customer ID:", customerId, "Price ID:", subscriptionPriceId, "Trial days:", trialDays);
+          
+          if (customerId && subscriptionPriceId) {
+            try {
+              // Create subscription with trial period
+              const trialEnd = Math.floor(Date.now() / 1000) + (parseInt(trialDays || "7", 10) * 24 * 60 * 60);
+              
+              const subscription = await stripe.subscriptions.create({
+                customer: customerId,
+                items: [{ price: subscriptionPriceId }],
+                trial_end: trialEnd,
+                metadata: {
+                  userId: resolvedUserId || "",
+                  plan: plan || "",
+                },
+              });
+              
+              // Update user with subscription info
+              const coinsToAdd = getPlanCoins(plan || null);
+              await userRef.set(
+                {
+                  subscriptionPlan: plan || null,
+                  subscriptionStatus: "trialing",
+                  subscriptionStartedAt: now,
+                  subscriptionCancelled: false,
+                  stripeSubscriptionId: subscription.id,
+                  stripeCustomerId: customerId,
+                  trialEndsAt: new Date(trialEnd * 1000).toISOString(),
+                  updatedAt: now,
+                },
+                { merge: true }
+              );
+              
+              if (coinsToAdd > 0) {
+                await userRef.set(
+                  {
+                    coins: FieldValue.increment(coinsToAdd),
+                    updatedAt: now,
+                  },
+                  { merge: true }
+                );
+              }
+              
+              // Update lead document
+              if (customerEmail) {
+                try {
+                  const leadsQuery = await adminDb
+                    .collection("leads")
+                    .where("email", "==", customerEmail)
+                    .orderBy("createdAt", "desc")
+                    .limit(1)
+                    .get();
+                  
+                  if (!leadsQuery.empty) {
+                    await leadsQuery.docs[0].ref.update({
+                      subscriptionStatus: plan || "trialing",
+                      subscribedAt: now,
+                    });
+                  }
+                } catch (leadErr) {
+                  console.error("Failed to update lead subscription status:", leadErr);
+                }
+              }
+              
+              console.log("Subscription created successfully:", subscription.id);
+            } catch (subErr) {
+              console.error("Failed to create subscription after trial payment:", subErr);
+            }
+          } else {
+            console.log("Missing customerId or subscriptionPriceId for trial_payment");
+          }
         } else if (type === "trial_subscription") {
-          // New trial-based subscription: subscription is created atomically by Stripe
-          // Just need to get subscription ID from session and update user
+          // Legacy: trial-based subscription created atomically by Stripe
           const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
           const customerId = typeof session.customer === "string" ? session.customer : null;
           
