@@ -1,11 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Check, Sparkles } from "lucide-react";
+import { Check, Sparkles, Loader2 } from "lucide-react";
 
 const progressSteps = [
   { label: "Order submitted", completed: true },
@@ -23,6 +23,26 @@ const features = [
 
 export default function Step20Page() {
   const router = useRouter();
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // Route protection: Check if user has completed registration
+  useEffect(() => {
+    const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
+    const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
+    
+    // Must have completed both payment and registration to access this page
+    if (hasCompletedPayment && hasCompletedRegistration) {
+      setIsAuthorized(true);
+    } else if (hasCompletedPayment && !hasCompletedRegistration) {
+      // Paid but not registered - redirect to registration
+      router.replace("/onboarding/step-19");
+      return;
+    } else {
+      // No payment - redirect to payment page
+      router.replace("/onboarding/step-17");
+      return;
+    }
+  }, [router]);
 
   const handleAccessApp = async () => {
     // Set access cookie via API
@@ -33,6 +53,15 @@ export default function Step20Page() {
     }
     router.push("/dashboard");
   };
+
+  // Show loading while checking authorization
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <motion.div

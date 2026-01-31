@@ -5,7 +5,7 @@ import { useState, useEffect, Suspense } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Check, Eye, EyeOff, ThumbsUp } from "lucide-react";
+import { Check, Eye, EyeOff, ThumbsUp, Loader2 } from "lucide-react";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { saveUserProfile } from "@/lib/user-profile";
 import { createUserWithEmailAndPassword } from "firebase/auth";
@@ -51,9 +51,31 @@ function Step19Content() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   const onboardingData = useOnboardingStore();
   const searchParams = useSearchParams();
+
+  // Route protection: Check if user has completed payment
+  useEffect(() => {
+    const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
+    const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
+    
+    // If user has completed registration, redirect to app
+    if (hasCompletedRegistration) {
+      router.replace("/home");
+      return;
+    }
+    
+    // Allow access only if payment is completed
+    if (hasCompletedPayment) {
+      setIsAuthorized(true);
+    } else {
+      // No valid payment - redirect to payment page
+      router.replace("/onboarding/step-17");
+      return;
+    }
+  }, [router]);
 
   // Get stored email from previous step
   useEffect(() => {
@@ -208,8 +230,19 @@ function Step19Content() {
   const { triggerLight } = useHaptic();
   const handleContinue = () => {
     triggerLight();
+    // Mark registration as completed
+    localStorage.setItem("palmcosmic_registration_completed", "true");
     router.push("/onboarding/step-20");
   };
+
+  // Show loading while checking authorization
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <motion.div

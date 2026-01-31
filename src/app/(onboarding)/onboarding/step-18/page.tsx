@@ -64,9 +64,38 @@ function Step18Content() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [isAnalyzingPalm, setIsAnalyzingPalm] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   
   const { unlockFeature, unlockAllFeatures, purchaseSubscription, addCoins } = useUserStore();
   const { birthMonth, birthDay, birthYear } = useOnboardingStore();
+
+  // Route protection: Check if user has completed payment
+  useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
+    const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
+    
+    // If user has completed registration, redirect to app
+    if (hasCompletedRegistration) {
+      router.replace("/home");
+      return;
+    }
+    
+    // Allow access if: valid session_id from Stripe OR already completed payment
+    if (sessionId || hasCompletedPayment) {
+      setIsAuthorized(true);
+      
+      // Mark payment as completed if coming from Stripe
+      if (sessionId) {
+        localStorage.setItem("palmcosmic_payment_completed", "true");
+        localStorage.setItem("palmcosmic_payment_session_id", sessionId);
+      }
+    } else {
+      // No valid payment - redirect to payment page
+      router.replace("/onboarding/step-17");
+      return;
+    }
+  }, [searchParams, router]);
 
   // Trigger palm reading analysis after successful payment
   useEffect(() => {
@@ -263,6 +292,15 @@ function Step18Content() {
     // User skips upsells - only palm reading is unlocked (from base subscription)
     router.push("/onboarding/step-19");
   };
+
+  // Show loading while checking authorization
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <motion.div

@@ -183,6 +183,20 @@ export default function Step17Page() {
     const handlePageShow = () => setIsProcessing(false);
     window.addEventListener("pageshow", handlePageShow);
     
+    // Route protection: Check if user has already completed payment
+    const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
+    const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
+    
+    if (hasCompletedRegistration) {
+      // User has completed registration - redirect to app
+      router.replace("/home");
+      return;
+    } else if (hasCompletedPayment) {
+      // User has paid but not registered - redirect to upsell page
+      router.replace("/onboarding/step-18");
+      return;
+    }
+    
     // Track ViewContent when user sees pricing page
     pixelEvents.viewContent("Subscription Plans", "pricing");
     
@@ -197,7 +211,7 @@ export default function Step17Page() {
     setCompatibilityStats(generateCompatibilityStats());
     
     return () => window.removeEventListener("pageshow", handlePageShow);
-  }, []);
+  }, [router]);
 
   // Intersection observer for testimonial and birth chart sections sticky CTA
   useEffect(() => {

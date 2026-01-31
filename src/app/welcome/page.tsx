@@ -9,6 +9,23 @@ export default function WelcomePage() {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Route protection: Check user status and redirect accordingly
+  useEffect(() => {
+    const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
+    const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
+    
+    if (hasCompletedRegistration) {
+      // User has completed registration - redirect to app
+      router.replace("/home");
+      return;
+    } else if (hasCompletedPayment) {
+      // User has paid but not registered - redirect to upsell page
+      router.replace("/onboarding/step-18");
+      return;
+    }
+    // New user - allow access to welcome page
+  }, [router]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;

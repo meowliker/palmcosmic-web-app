@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 import { useRouter } from "next/navigation";
@@ -21,6 +21,20 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { gender, setGender } = useOnboardingStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Route protection: Check user status and redirect accordingly
+  useEffect(() => {
+    const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
+    const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
+    
+    if (hasCompletedRegistration) {
+      router.replace("/home");
+      return;
+    } else if (hasCompletedPayment) {
+      router.replace("/onboarding/step-18");
+      return;
+    }
+  }, [router]);
 
   const handleGenderSelect = (selectedGender: Gender) => {
     setGender(selectedGender);
