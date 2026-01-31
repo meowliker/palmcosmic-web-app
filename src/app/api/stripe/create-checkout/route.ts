@@ -51,67 +51,55 @@ export async function POST(request: NextRequest) {
     let sessionParams: any;
 
     if (isNewTrialPlan) {
-      // New trial-based pricing: charge upfront trial fee, then create subscription via webhook
+      // New trial-based pricing: create subscription with trial period and upfront fee
       const subscriptionPriceId = SUBSCRIPTION_PRICE_IDS[plan];
+      const trialPriceId = TRIAL_PRICE_IDS[plan];
       
-      if (!subscriptionPriceId) {
-        console.log("Missing subscription price ID for plan:", plan);
+      if (!subscriptionPriceId || !trialPriceId) {
+        console.log("Missing price IDs for plan:", plan);
         return NextResponse.json(
           {
-            error: `Subscription price not configured for plan: ${plan}. Add the required STRIPE_PRICE env vars.`,
+            error: `Price IDs not configured for plan: ${plan}. Add the required STRIPE_PRICE env vars.`,
             debug: {
               plan,
-              has2WeekPlan: !!process.env.STRIPE_PRICE_2WEEK_PLAN,
-              hasMonthlyPlan: !!process.env.STRIPE_PRICE_MONTHLY_PLAN,
+              hasSubscriptionPrice: !!subscriptionPriceId,
+              hasTrialPrice: !!trialPriceId,
             },
           },
           { status: 400 }
         );
       }
 
-      // Trial fees in cents
-      const trialFees: Record<string, number> = {
-        "1week": 100,   // $1.00 in cents
-        "2week": 549,   // $5.49 in cents
-        "4week": 999,   // $9.99 in cents
-      };
-
-      // Use payment mode for the trial fee with setup_future_usage to save payment method
-      // The subscription will be created via webhook after payment succeeds
+      // Use subscription mode with trial period and upfront trial fee
+      // This creates the subscription atomically with payment - no webhook needed
       sessionParams = {
-        mode: "payment",
+        mode: "subscription",
         payment_method_types: ["card"],
         line_items: [
           {
-            price_data: {
-              currency: "usd",
-              product_data: {
-                name: `${plan === "1week" ? "1-Week" : plan === "2week" ? "2-Week" : "4-Week"} Trial Access`,
-                description: `Trial period access. After ${TRIAL_DAYS[plan]} days, you'll be charged ${plan === "4week" ? "$29.99/month" : "$19.99 every 2 weeks"}.`,
-              },
-              unit_amount: trialFees[plan],
-            },
+            price: subscriptionPriceId,
             quantity: 1,
           },
         ],
-        success_url: `${baseUrl}/onboarding/step-18?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/onboarding/step-17`,
-        payment_intent_data: {
-          setup_future_usage: "off_session",
+        subscription_data: {
+          trial_period_days: TRIAL_DAYS[plan],
           metadata: {
             userId: userId || "",
             plan,
-            type: "trial_subscription",
-            subscriptionPriceId,
-            trialDays: TRIAL_DAYS[plan].toString(),
           },
+          // Add upfront trial fee as invoice item
+          add_invoice_items: [
+            {
+              price: trialPriceId,
+            },
+          ],
         },
+        success_url: `${baseUrl}/onboarding/step-18?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/onboarding/step-17`,
         metadata: {
           userId: userId || "",
           plan,
           type: "trial_subscription",
-          subscriptionPriceId,
-          trialDays: TRIAL_DAYS[plan].toString(),
         },
       };
     } else {
