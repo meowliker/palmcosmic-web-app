@@ -269,24 +269,48 @@ export default function EditProfilePage() {
     
     try {
       const userId = localStorage.getItem("palmcosmic_user_id");
+      const userEmail = localStorage.getItem("palmcosmic_email");
       
-      // Check if user has active subscription
-      // Note: In production, check Stripe subscription status
-      // For now, we'll proceed with deletion
+      // Step 1: Cancel Stripe subscription first (set cancel_at_period_end)
+      // This prevents continued billing after account deletion
+      if (userId || userEmail) {
+        try {
+          const cancelResponse = await fetch("/api/stripe/cancel-subscription", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: userId || "",
+              email: userEmail || "",
+            }),
+          });
+          
+          const cancelData = await cancelResponse.json();
+          if (cancelData.success) {
+            console.log("Subscription cancelled successfully before account deletion");
+          } else if (cancelData.error && !cancelData.error.includes("Subscription ID is required")) {
+            // Only log non-critical errors (user might not have a subscription)
+            console.log("Subscription cancellation note:", cancelData.error);
+          }
+        } catch (cancelError) {
+          // Don't block deletion if subscription cancellation fails
+          // The subscription might not exist or already be cancelled
+          console.log("Subscription cancellation skipped:", cancelError);
+        }
+      }
       
-      // Delete from Firebase
+      // Step 2: Delete from Firebase
       if (userId) {
         await deleteDoc(doc(db, "users", userId));
         await deleteDoc(doc(db, "palm_readings", userId));
       }
       
-      // Clear all local data
+      // Step 3: Clear all local data
       localStorage.clear();
       
-      // Reset stores
+      // Step 4: Reset stores
       resetUserState();
       
-      // Redirect to welcome screen
+      // Step 5: Redirect to welcome screen
       router.push("/welcome");
     } catch (error) {
       console.error("Delete account error:", error);

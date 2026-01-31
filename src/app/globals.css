@@ -111,3 +111,17 @@
 .animate-scan-line {
   animation: scan-line 4s ease-in-out infinite;
 }
+
+/* Infinite scroll animation for emails */
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 15s linear infinite;
+}

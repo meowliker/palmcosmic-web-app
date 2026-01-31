@@ -192,15 +192,18 @@ export default function ManageSubscriptionPage() {
     return "$19.99/2 weeks";
   };
 
+  const [successMessage, setSuccessMessage] = useState("");
+
   const handleUpgrade = async (planId: string) => {
     if (planId === activePlan) return; // Already on this plan
 
     setError("");
+    setSuccessMessage("");
     setIsProcessing(true);
     setSelectedPlan(planId);
 
     try {
-      // Use upgrade checkout (no trial) for existing subscribers
+      // Use upgrade endpoint - updates existing subscription or creates new checkout
       const response = await fetch("/api/stripe/create-upgrade-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -213,19 +216,29 @@ export default function ManageSubscriptionPage() {
 
       const data = await response.json();
 
-      if (data.url) {
+      if (data.success) {
+        // Subscription was updated directly (no checkout needed)
+        setSuccessMessage(data.message || "Plan updated successfully!");
+        setCurrentPlan(planId);
+        setSubscriptionPlan(planId as any);
+        setIsProcessing(false);
+        setSelectedPlan(null);
+        // Refresh subscription status
+        fetchSubscriptionStatus();
+      } else if (data.url) {
+        // Fallback: redirect to checkout (for users without existing subscription)
         window.location.href = data.url;
       } else if (data.error) {
         setError(data.error);
         setIsProcessing(false);
         setSelectedPlan(null);
       } else {
-        setError("Unable to start checkout. Please try again.");
+        setError("Unable to change plan. Please try again.");
         setIsProcessing(false);
         setSelectedPlan(null);
       }
     } catch (err) {
-      console.error("Upgrade error:", err);
+      console.error("Plan change error:", err);
       setError("Something went wrong. Please try again.");
       setIsProcessing(false);
       setSelectedPlan(null);
@@ -410,6 +423,17 @@ export default function ManageSubscriptionPage() {
                 className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl"
               >
                 <p className="text-red-400 text-sm text-center">{error}</p>
+              </motion.div>
+            )}
+
+            {/* Success Message */}
+            {successMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl"
+              >
+                <p className="text-green-400 text-sm text-center">{successMessage}</p>
               </motion.div>
             )}
 
