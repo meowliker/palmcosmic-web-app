@@ -29,6 +29,7 @@ import {
   ChevronDown,
   Package,
   X,
+  HelpCircle,
 } from "lucide-react";
 
 interface SubscriberInfo {
@@ -134,7 +135,21 @@ export default function AdminRevenuePage() {
   
   // Subscriber tab
   const [subscriberTab, setSubscriberTab] = useState<"active" | "trialing" | "cancelled">("active");
-  
+
+  // Format date with time
+  const formatDateTime = (dateString: string | null) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   // Card order (persisted in localStorage)
   const [cardOrder, setCardOrder] = useState<string[]>(DEFAULT_CARD_ORDER);
   const [draggedCard, setDraggedCard] = useState<string | null>(null);
@@ -554,6 +569,7 @@ export default function AdminRevenuePage() {
                 : "Monthly Recurring"}
               icon={<TrendingUp className="w-4 h-4" />}
               color="text-green-400"
+              tooltip="Monthly Recurring Revenue: Predictable revenue from active paying subscriptions, normalized to a monthly amount. Excludes trialing users."
             />
             <KPICard
               title="ARR"
@@ -563,6 +579,7 @@ export default function AdminRevenuePage() {
                 : "Annual Recurring"}
               icon={<TrendingUp className="w-4 h-4" />}
               color="text-blue-400"
+              tooltip="Annual Recurring Revenue: MRR multiplied by 12. Represents the yearly value of your subscription revenue."
             />
             <KPICard
               title="Total Revenue"
@@ -570,6 +587,7 @@ export default function AdminRevenuePage() {
               subtitle="All time"
               icon={<DollarSign className="w-4 h-4" />}
               color="text-purple-400"
+              tooltip="Total Revenue: All-time revenue from subscriptions, upsells, coins, and other payments. Includes one-time and recurring charges."
             />
             <KPICard
               title="MoM Growth"
@@ -577,6 +595,7 @@ export default function AdminRevenuePage() {
               subtitle="vs last month"
               icon={parseFloat(data.momGrowth) >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
               color={parseFloat(data.momGrowth) >= 0 ? "text-green-400" : "text-red-400"}
+              tooltip="Month-over-Month Growth: Percentage change in revenue compared to the previous month. Positive values indicate growth."
             />
           </div>
         </section>
@@ -587,10 +606,10 @@ export default function AdminRevenuePage() {
             <Calendar className="w-4 h-4" /> Revenue by Period
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricCard title="Today" value={formatCurrency(data.revenueToday)} />
-            <MetricCard title="This Week" value={formatCurrency(data.revenueThisWeek)} />
-            <MetricCard title="This Month" value={formatCurrency(data.revenueThisMonth)} />
-            <MetricCard title="This Year" value={formatCurrency(data.revenueThisYear)} />
+            <MetricCard title="Today" value={formatCurrency(data.revenueToday)} tooltip="Revenue generated today from all payment types." />
+            <MetricCard title="This Week" value={formatCurrency(data.revenueThisWeek)} tooltip="Revenue generated this week (Sunday to today)." />
+            <MetricCard title="This Month" value={formatCurrency(data.revenueThisMonth)} tooltip="Revenue generated this month (1st to today)." />
+            <MetricCard title="This Year" value={formatCurrency(data.revenueThisYear)} tooltip="Revenue generated this year (Jan 1st to today)." />
           </div>
         </section>
 
@@ -624,8 +643,18 @@ export default function AdminRevenuePage() {
 
           {/* ARPU & LTV */}
           <div className="grid grid-cols-2 gap-3 mt-4">
-            <MetricCard title="ARPU" value={formatCurrency(data.arpu)} subtitle="Avg Revenue Per User" />
-            <MetricCard title="LTV" value={formatCurrency(data.ltv)} subtitle="Lifetime Value" />
+            <MetricCard 
+              title="ARPU" 
+              value={formatCurrency(data.arpu)} 
+              subtitle="Avg Revenue Per User" 
+              tooltip="Average Revenue Per User: Total revenue divided by total number of paying users. Indicates how much each user generates on average."
+            />
+            <MetricCard 
+              title="LTV" 
+              value={formatCurrency(data.ltv)} 
+              subtitle="Lifetime Value" 
+              tooltip="Lifetime Value: Estimated total revenue a customer will generate over their lifetime. Calculated as ARPU divided by churn rate."
+            />
           </div>
         </section>
 
@@ -706,24 +735,28 @@ export default function AdminRevenuePage() {
               value={data.totalActiveSubscribers.toString()}
               icon={<Users className="w-4 h-4" />}
               color="text-green-400"
+              tooltip="Total number of active paying subscribers and trialing users verified in Stripe."
             />
             <KPICard
               title="New This Month"
               value={data.newSubscribersThisMonth.toString()}
               icon={<UserPlus className="w-4 h-4" />}
               color="text-blue-400"
+              tooltip="Number of new subscribers who started their subscription this month."
             />
             <KPICard
               title="Churned"
               value={data.churnedSubscribers.toString()}
               icon={<UserMinus className="w-4 h-4" />}
               color="text-red-400"
+              tooltip="Total number of subscribers who have cancelled their subscription."
             />
             <KPICard
               title="Net Change"
               value={data.netSubscriberChange >= 0 ? `+${data.netSubscriberChange}` : data.netSubscriberChange.toString()}
               icon={data.netSubscriberChange >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
               color={data.netSubscriberChange >= 0 ? "text-green-400" : "text-red-400"}
+              tooltip="Net subscriber change this month (New subscribers minus churned subscribers)."
             />
           </div>
         </section>
@@ -734,11 +767,11 @@ export default function AdminRevenuePage() {
             <Repeat className="w-4 h-4" /> Churn & Retention
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <MetricCard title="Lifetime Churn" value={`${data.churnRate}%`} color="text-red-400" />
-            <MetricCard title="Monthly Churn" value={`${data.monthlyChurnRate || "0"}%`} color="text-orange-400" />
-            <MetricCard title="Retention Rate" value={`${data.retentionRate}%`} color="text-green-400" />
-            <MetricCard title="Trials Started" value={data.trialsStarted.toString()} />
-            <MetricCard title="Trial Conversion" value={`${data.trialConversionRate}%`} color="text-blue-400" />
+            <MetricCard title="Lifetime Churn" value={`${data.churnRate}%`} color="text-red-400" tooltip="Percentage of all subscribers who have ever cancelled (lifetime churn rate)." />
+            <MetricCard title="Monthly Churn" value={`${data.monthlyChurnRate || "0"}%`} color="text-orange-400" tooltip="Percentage of subscribers who cancelled this month relative to the start of the month." />
+            <MetricCard title="Retention Rate" value={`${data.retentionRate}%`} color="text-green-400" tooltip="Percentage of subscribers who remain active (100% - Lifetime Churn Rate)." />
+            <MetricCard title="Trials Started" value={data.trialsStarted.toString()} tooltip="Total number of users who have started a trial subscription." />
+            <MetricCard title="Trial Conversion" value={`${data.trialConversionRate}%`} color="text-blue-400" tooltip="Percentage of trial users who converted to paying subscribers after their trial ended." />
           </div>
         </section>
 
@@ -823,15 +856,15 @@ export default function AdminRevenuePage() {
                         </td>
                         <td className="text-white/70 text-sm px-4 py-3 capitalize">{sub.plan || "-"}</td>
                         <td className="text-white/70 text-sm px-4 py-3">
-                          {sub.startedAt ? new Date(sub.startedAt).toLocaleDateString() : "-"}
+                          {formatDateTime(sub.startedAt)}
                         </td>
                         <td className="text-white/70 text-sm px-4 py-3">
                           {subscriberTab === "trialing" && sub.trialEndsAt
-                            ? new Date(sub.trialEndsAt).toLocaleDateString()
+                            ? formatDateTime(sub.trialEndsAt)
                             : subscriberTab === "cancelled" && sub.cancelledAt
-                              ? new Date(sub.cancelledAt).toLocaleDateString()
+                              ? formatDateTime(sub.cancelledAt)
                               : sub.currentPeriodEnd
-                                ? new Date(sub.currentPeriodEnd).toLocaleDateString()
+                                ? formatDateTime(sub.currentPeriodEnd)
                                 : "-"}
                         </td>
                       </tr>
@@ -854,24 +887,28 @@ export default function AdminRevenuePage() {
               value={data.successfulPayments.toString()}
               icon={<CheckCircle className="w-4 h-4" />}
               color="text-green-400"
+              tooltip="Total number of successful payment transactions across all payment types."
             />
             <KPICard
               title="Failed"
               value={data.failedPayments.toString()}
               icon={<XCircle className="w-4 h-4" />}
               color="text-red-400"
+              tooltip="Number of failed payment attempts. High failure rates may indicate payment method issues."
             />
             <KPICard
               title="Refunds"
               value={data.refunds.toString()}
               icon={<RefreshCw className="w-4 h-4" />}
               color="text-amber-400"
+              tooltip="Total number of refunded transactions."
             />
             <KPICard
               title="Conversions"
               value={data.trialsConverted.toString()}
               icon={<ArrowUpRight className="w-4 h-4" />}
               color="text-blue-400"
+              tooltip="Number of trial users who successfully converted to paying subscribers."
             />
           </div>
         </section>
@@ -1094,7 +1131,27 @@ export default function AdminRevenuePage() {
   );
 }
 
-function KPICard({ title, value, subtitle, icon, color }: { title: string; value: string; subtitle?: string; icon?: React.ReactNode; color?: string }) {
+function Tooltip({ content }: { content: string }) {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  return (
+    <div className="relative inline-block">
+      <HelpCircle
+        className="w-3.5 h-3.5 text-white/30 hover:text-white/60 cursor-help transition-colors"
+        onMouseEnter={() => setIsVisible(true)}
+        onMouseLeave={() => setIsVisible(false)}
+      />
+      {isVisible && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 px-3 py-2 bg-[#0A0E1A] border border-white/20 rounded-lg shadow-xl">
+          <p className="text-white/80 text-xs leading-relaxed">{content}</p>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-[#0A0E1A] border-r border-b border-white/20 rotate-45" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KPICard({ title, value, subtitle, icon, color, tooltip }: { title: string; value: string; subtitle?: string; icon?: React.ReactNode; color?: string; tooltip?: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1102,7 +1159,10 @@ function KPICard({ title, value, subtitle, icon, color }: { title: string; value
       className="bg-[#1A2235] rounded-xl p-4 border border-white/10"
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-white/50 text-xs">{title}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/50 text-xs">{title}</span>
+          {tooltip && <Tooltip content={tooltip} />}
+        </div>
         {icon && <span className={color || "text-white/50"}>{icon}</span>}
       </div>
       <p className={`text-xl font-bold ${color || "text-white"}`}>{value}</p>
@@ -1111,10 +1171,13 @@ function KPICard({ title, value, subtitle, icon, color }: { title: string; value
   );
 }
 
-function MetricCard({ title, value, subtitle, color }: { title: string; value: string; subtitle?: string; color?: string }) {
+function MetricCard({ title, value, subtitle, color, tooltip }: { title: string; value: string; subtitle?: string; color?: string; tooltip?: string }) {
   return (
     <div className="bg-[#1A2235] rounded-xl p-3 border border-white/10">
-      <p className="text-white/50 text-xs mb-1">{title}</p>
+      <div className="flex items-center gap-1.5 mb-1">
+        <p className="text-white/50 text-xs">{title}</p>
+        {tooltip && <Tooltip content={tooltip} />}
+      </div>
       <p className={`text-lg font-semibold ${color || "text-white"}`}>{value}</p>
       {subtitle && <p className="text-white/40 text-xs">{subtitle}</p>}
     </div>
