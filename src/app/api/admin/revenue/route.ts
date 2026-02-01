@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,9 +45,56 @@ export async function GET(request: NextRequest) {
       payments.push({ id: doc.id, ...doc.data() });
     });
     
+    // Fetch subscriptions directly from Stripe for accurate data
+    // Fetch ALL statuses: active, trialing, canceled, past_due, unpaid, incomplete, incomplete_expired
+    const stripeSubscriptions: Map<string, any> = new Map();
+    try {
+      // Fetch active/trialing subscriptions
+      const activeSubscriptions = await stripe.subscriptions.list({
+        limit: 100,
+        expand: ["data.customer"],
+      });
+      
+      // Fetch canceled subscriptions separately
+      const canceledSubscriptions = await stripe.subscriptions.list({
+        limit: 100,
+        status: "canceled",
+        expand: ["data.customer"],
+      });
+      
+      // Combine all subscriptions
+      const allSubscriptions = [...activeSubscriptions.data, ...canceledSubscriptions.data];
+      
+      for (const sub of allSubscriptions) {
+        const customer = sub.customer as Stripe.Customer;
+        if (customer && customer.email) {
+          const email = customer.email.toLowerCase();
+          // Only store if not already present (prefer active over canceled if duplicate)
+          if (!stripeSubscriptions.has(email) || sub.status !== "canceled") {
+            stripeSubscriptions.set(email, {
+              id: sub.id,
+              status: sub.status, // trialing, active, canceled, past_due, etc.
+              plan: (sub as any).metadata?.plan || null,
+              currentPeriodStart: sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null,
+              currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+              trialStart: sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
+              trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+              created: new Date(sub.created * 1000).toISOString(),
+              cancelAt: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
+              canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
+              cancelAtPeriodEnd: sub.cancel_at_period_end, // true if scheduled to cancel at period end
+            });
+          }
+        }
+      }
+    } catch (stripeErr) {
+      console.error("Failed to fetch Stripe subscriptions:", stripeErr);
+    }
+    
     // Fetch all users for subscriber data
     const usersSnapshot = await adminDb.collection("users").get();
     const users: any[] = [];
+    const anonUsersWithSubscription: any[] = [];
     usersSnapshot.forEach(doc => {
       const userData = { id: doc.id, ...doc.data() };
       // Filter out anonymous users (they get migrated to real users after registration)
@@ -52,6 +102,9 @@ export async function GET(request: NextRequest) {
       // to avoid double-counting the same subscriber
       if (!doc.id.startsWith("anon_")) {
         users.push(userData);
+      } else if ((userData as any).subscriptionStatus === "active" || (userData as any).subscriptionStatus === "trialing") {
+        // Track anonymous users who have subscriptions but haven't registered yet
+        anonUsersWithSubscription.push(userData);
       }
     });
     
@@ -99,22 +152,28 @@ export async function GET(request: NextRequest) {
       u.subscriptionStatus === "trialing" && !u.subscriptionCancelled
     );
     
+    // Billing cycle conversion constants (mathematically correct)
+    const WEEKLY_TO_MONTHLY = 52 / 12; // 4.333
+    const BIWEEKLY_TO_MONTHLY = 26 / 12; // 2.1667
+    const FOURWEEKLY_TO_MONTHLY = 13 / 12; // 1.0833
+    
     // Calculate MRR from actual paying subscribers only
     const mrr = activePayingSubscribers.reduce((sum, u) => {
       // Legacy plans
-      if (u.subscriptionPlan === "weekly") return sum + (4.99 * 4); // Weekly to monthly
+      if (u.subscriptionPlan === "weekly") return sum + (4.99 * WEEKLY_TO_MONTHLY); // ~$21.65/month
       if (u.subscriptionPlan === "monthly") return sum + 9.99;
       if (u.subscriptionPlan === "yearly") return sum + (49.99 / 12);
       // New trial plans (after trial, they pay recurring)
-      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * 2); // 2-week plan = $19.99 bi-weekly = ~$39.98/month
-      if (u.subscriptionPlan === "4week") return sum + 29.99; // Monthly plan
+      // Bi-weekly = 26 cycles/year, so monthly = price * (26/12) = price * 2.1667
+      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY); // ~$43.31/month
+      if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY); // ~$32.49/month
       return sum;
     }, 0);
     
     // Projected MRR includes trialing users (if they all convert)
     const projectedMrr = trialingSubscribers.reduce((sum, u) => {
-      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * 2);
-      if (u.subscriptionPlan === "4week") return sum + 29.99;
+      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
+      if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
       return sum;
     }, mrr);
     
@@ -151,7 +210,7 @@ export async function GET(request: NextRequest) {
       return startedAt && startedAt >= startOfMonth && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing");
     }).length;
     
-    const churnedSubscribers = users.filter(u => u.subscriptionCancelled === true).length;
+    const churnedSubscribersCount = users.filter(u => u.subscriptionCancelled === true).length;
     
     // ARPU (Average Revenue Per User)
     const uniquePayingUsers = new Set(payments.map(p => p.userId)).size;
@@ -162,8 +221,8 @@ export async function GET(request: NextRequest) {
     const ltv = (parseFloat(arpu) * avgSubscriptionMonths).toFixed(2);
     
     // Churn rate
-    const churnRate = totalActiveSubscribers + churnedSubscribers > 0
-      ? ((churnedSubscribers / (totalActiveSubscribers + churnedSubscribers)) * 100).toFixed(1)
+    const churnRate = totalActiveSubscribers + churnedSubscribersCount > 0
+      ? ((churnedSubscribersCount / (totalActiveSubscribers + churnedSubscribersCount)) * 100).toFixed(1)
       : "0";
     
     const retentionRate = (100 - parseFloat(churnRate)).toFixed(1);
@@ -173,9 +232,9 @@ export async function GET(request: NextRequest) {
     const failedPayments = payments.filter(p => p.status === "failed").length;
     const refunds = payments.filter(p => p.status === "refunded").length;
     
-    // Trial conversions
-    const trialsStarted = users.filter(u => u.trialStartedAt).length;
-    const trialsConverted = users.filter(u => u.trialStartedAt && u.subscriptionStatus === "active").length;
+    // Trial conversions - use trialEndsAt since trialStartedAt may not be set
+    const trialsStarted = users.filter(u => u.trialEndsAt || u.trialStartedAt).length;
+    const trialsConverted = users.filter(u => (u.trialEndsAt || u.trialStartedAt) && u.subscriptionStatus === "active").length;
     const trialConversionRate = trialsStarted > 0 
       ? ((trialsConverted / trialsStarted) * 100).toFixed(1)
       : "0";
@@ -202,24 +261,132 @@ export async function GET(request: NextRequest) {
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.revenue - a.revenue);
     
-    // Revenue over time (last 30 days)
+    // Revenue over time (last 30 days) - use proper date comparison
     const revenueOverTime: { date: string; revenue: number }[] = [];
     for (let i = 29; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split("T")[0];
+      date.setHours(0, 0, 0, 0);
+      
+      const dayStart = new Date(date);
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59, 999);
+      
+      const dateStr = dayStart.toISOString().split("T")[0];
       const dayRevenue = payments
-        .filter(p => p.createdAt && p.createdAt.startsWith(dateStr))
+        .filter(p => {
+          if (!p.createdAt) return false;
+          const paymentDate = new Date(p.createdAt);
+          return paymentDate >= dayStart && paymentDate <= dayEnd;
+        })
         .reduce((sum, p) => sum + getAmount(p), 0);
       revenueOverTime.push({ date: dateStr, revenue: dayRevenue });
     }
     
-    // Subscription distribution
+    // Subscription distribution - include new trial-based plans
     const subscriptionDistribution = {
-      weekly: users.filter(u => u.subscriptionPlan === "weekly" && u.subscriptionStatus === "active").length,
-      monthly: users.filter(u => u.subscriptionPlan === "monthly" && u.subscriptionStatus === "active").length,
-      yearly: users.filter(u => u.subscriptionPlan === "yearly" && u.subscriptionStatus === "active").length,
+      // Legacy plans
+      weekly: users.filter(u => u.subscriptionPlan === "weekly" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
+      monthly: users.filter(u => u.subscriptionPlan === "monthly" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
+      yearly: users.filter(u => u.subscriptionPlan === "yearly" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
+      // New trial-based plans
+      "1week": users.filter(u => u.subscriptionPlan === "1week" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
+      "2week": users.filter(u => u.subscriptionPlan === "2week" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
+      "4week": users.filter(u => u.subscriptionPlan === "4week" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
     };
+    
+    // Cancelled subscribers list
+    const cancelledSubscribers = users.filter(u => u.subscriptionCancelled === true);
+    
+    // Monthly churn rate (users who cancelled THIS MONTH)
+    const churnedThisMonth = users.filter(u => {
+      if (!u.subscriptionEndedAt || !u.subscriptionCancelled) return false;
+      const endedAt = new Date(u.subscriptionEndedAt);
+      return endedAt >= startOfMonth;
+    }).length;
+    const subscribersAtStartOfMonth = totalActiveSubscribers + churnedThisMonth;
+    const monthlyChurnRate = subscribersAtStartOfMonth > 0 
+      ? ((churnedThisMonth / subscribersAtStartOfMonth) * 100).toFixed(1)
+      : "0";
+    
+    // Subscriber lists for tabs - merge Firebase data with Stripe data for accuracy
+    // First, enrich user data with Stripe subscription info
+    const enrichedUsers = users.map(u => {
+      const email = (u.email || "").toLowerCase();
+      const stripeSub = stripeSubscriptions.get(email);
+      
+      if (stripeSub) {
+        // Use Stripe data as source of truth for subscription status and dates
+        return {
+          ...u,
+          subscriptionStatus: stripeSub.status, // trialing, active, canceled, etc.
+          subscriptionStartedAt: u.subscriptionStartedAt || stripeSub.created,
+          trialEndsAt: stripeSub.trialEnd || u.trialEndsAt,
+          currentPeriodEnd: stripeSub.currentPeriodEnd || u.currentPeriodEnd,
+          stripeSubscriptionId: stripeSub.id,
+          subscriptionPlan: u.subscriptionPlan || stripeSub.plan,
+          cancelAtPeriodEnd: stripeSub.cancelAtPeriodEnd, // scheduled to cancel
+          canceledAt: stripeSub.canceledAt, // when it was actually canceled
+          subscriptionCancelled: stripeSub.status === "canceled", // override Firebase with Stripe truth
+        };
+      }
+      return u;
+    });
+    
+    // Recalculate counts with enriched data
+    // IMPORTANT: Only include users who have a verified Stripe subscription
+    // This prevents showing users with stale Firebase data who don't exist in Stripe
+    
+    // Active = status is "active" AND exists in Stripe
+    const enrichedActivePayingSubscribers = enrichedUsers.filter(u => {
+      const email = (u.email || "").toLowerCase();
+      const hasStripeSubscription = stripeSubscriptions.has(email);
+      return hasStripeSubscription && u.subscriptionStatus === "active";
+    });
+    
+    // Trialing = status is "trialing" AND exists in Stripe
+    const enrichedTrialingSubscribers = enrichedUsers.filter(u => {
+      const email = (u.email || "").toLowerCase();
+      const hasStripeSubscription = stripeSubscriptions.has(email);
+      return hasStripeSubscription && u.subscriptionStatus === "trialing";
+    });
+    
+    // Cancelled = status is "canceled" AND exists in Stripe
+    const enrichedCancelledSubscribers = enrichedUsers.filter(u => {
+      const email = (u.email || "").toLowerCase();
+      const hasStripeSubscription = stripeSubscriptions.has(email);
+      return hasStripeSubscription && u.subscriptionStatus === "canceled";
+    });
+    
+    const activeSubscribersList = enrichedActivePayingSubscribers.map(u => ({
+      id: u.id,
+      email: u.email || "Unknown",
+      name: u.name || "",
+      plan: u.subscriptionPlan || "Unknown",
+      status: u.subscriptionStatus,
+      startedAt: u.subscriptionStartedAt || null,
+      currentPeriodEnd: u.currentPeriodEnd || null,
+    }));
+    
+    const trialingSubscribersList = enrichedTrialingSubscribers.map(u => ({
+      id: u.id,
+      email: u.email || "Unknown",
+      name: u.name || "",
+      plan: u.subscriptionPlan || "Unknown",
+      status: u.subscriptionStatus,
+      startedAt: u.subscriptionStartedAt || null,
+      trialEndsAt: u.trialEndsAt || null,
+    }));
+    
+    const cancelledSubscribersList = enrichedCancelledSubscribers.map(u => ({
+      id: u.id,
+      email: u.email || "Unknown",
+      name: u.name || "",
+      plan: u.subscriptionPlan || "Unknown",
+      status: "cancelled",
+      startedAt: u.subscriptionStartedAt || null,
+      cancelledAt: u.canceledAt || u.subscriptionEndedAt || null,
+    }));
     
     // Create a map of userId to user data for quick lookup
     const userMap = new Map<string, { email?: string; name?: string }>();
@@ -249,8 +416,8 @@ export async function GET(request: NextRequest) {
       arr: arr.toFixed(2),
       projectedMrr: projectedMrr.toFixed(2),
       projectedArr: projectedArr.toFixed(2),
-      activePayingSubscribers: activePayingSubscribers.length,
-      trialingSubscribers: trialingSubscribers.length,
+      activePayingSubscribers: enrichedActivePayingSubscribers.length,
+      trialingSubscribers: enrichedTrialingSubscribers.length,
       totalRevenue: totalRevenue.toFixed(2),
       revenueToday: revenueToday.toFixed(2),
       revenueThisWeek: revenueThisWeek.toFixed(2),
@@ -266,13 +433,14 @@ export async function GET(request: NextRequest) {
       ltv,
       
       // Subscriber counts
-      totalActiveSubscribers,
+      totalActiveSubscribers: enrichedActivePayingSubscribers.length + enrichedTrialingSubscribers.length,
       newSubscribersThisMonth,
-      churnedSubscribers,
-      netSubscriberChange: newSubscribersThisMonth - churnedSubscribers,
+      churnedSubscribers: enrichedCancelledSubscribers.length,
+      netSubscriberChange: newSubscribersThisMonth - enrichedCancelledSubscribers.length,
       
       // Churn & Retention
       churnRate,
+      monthlyChurnRate,
       retentionRate,
       
       // Transaction activity
@@ -295,10 +463,21 @@ export async function GET(request: NextRequest) {
       // Recent transactions
       recentTransactions,
       
+      // Subscriber lists for tabs
+      activeSubscribersList,
+      trialingSubscribersList,
+      cancelledSubscribersList,
+      
       // Meta
       totalPayments: payments.length,
       totalUsers: users.length,
       uniquePayingUsers,
+      
+      // Debug: Anonymous users with active subscriptions (paid but not registered)
+      unregisteredSubscribers: anonUsersWithSubscription.length,
+      
+      // Stripe sync info
+      stripeSubscriptionsCount: stripeSubscriptions.size,
     });
   } catch (error: any) {
     console.error("Admin revenue API error:", error);
