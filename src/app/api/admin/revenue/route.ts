@@ -46,7 +46,13 @@ export async function GET(request: NextRequest) {
     const usersSnapshot = await adminDb.collection("users").get();
     const users: any[] = [];
     usersSnapshot.forEach(doc => {
-      users.push({ id: doc.id, ...doc.data() });
+      const userData = { id: doc.id, ...doc.data() };
+      // Filter out anonymous users (they get migrated to real users after registration)
+      // Anonymous users have IDs like "anon_123456" and should not be counted in metrics
+      // to avoid double-counting the same subscriber
+      if (!doc.id.startsWith("anon_")) {
+        users.push(userData);
+      }
     });
     
     // Helper to get payment amount (amountTotal is in cents from Stripe)
