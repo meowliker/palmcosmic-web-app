@@ -46,31 +46,50 @@ export async function GET(request: NextRequest) {
     });
     
     // Fetch subscriptions directly from Stripe for accurate data
-    // Fetch ALL statuses: active, trialing, canceled, past_due, unpaid, incomplete, incomplete_expired
+    // Fetch ALL statuses separately to ensure we get everything
     const stripeSubscriptions: Map<string, any> = new Map();
     try {
-      // Fetch active/trialing subscriptions
-      const activeSubscriptions = await stripe.subscriptions.list({
-        limit: 100,
-        expand: ["data.customer"],
-      });
+      // Stripe statuses: trialing, active, past_due, canceled, unpaid, incomplete, incomplete_expired, paused
+      const statusesToFetch: Stripe.SubscriptionListParams["status"][] = [
+        "trialing",
+        "active", 
+        "past_due",
+        "canceled",
+        "unpaid",
+        "incomplete",
+      ];
       
-      // Fetch canceled subscriptions separately
-      const canceledSubscriptions = await stripe.subscriptions.list({
-        limit: 100,
-        status: "canceled",
-        expand: ["data.customer"],
-      });
+      const allSubscriptions: Stripe.Subscription[] = [];
       
-      // Combine all subscriptions
-      const allSubscriptions = [...activeSubscriptions.data, ...canceledSubscriptions.data];
+      for (const status of statusesToFetch) {
+        const subs = await stripe.subscriptions.list({
+          limit: 100,
+          status,
+          expand: ["data.customer"],
+        });
+        allSubscriptions.push(...subs.data);
+      }
+      
+      // Priority order for duplicate emails: active > trialing > past_due > others > canceled
+      const statusPriority: Record<string, number> = {
+        active: 5,
+        trialing: 4,
+        past_due: 3,
+        unpaid: 2,
+        incomplete: 1,
+        canceled: 0,
+      };
       
       for (const sub of allSubscriptions) {
         const customer = sub.customer as Stripe.Customer;
         if (customer && customer.email) {
           const email = customer.email.toLowerCase();
-          // Only store if not already present (prefer active over canceled if duplicate)
-          if (!stripeSubscriptions.has(email) || sub.status !== "canceled") {
+          const existing = stripeSubscriptions.get(email);
+          const currentPriority = statusPriority[sub.status] ?? 0;
+          const existingPriority = existing ? (statusPriority[existing.status] ?? 0) : -1;
+          
+          // Only store if higher priority or not present
+          if (currentPriority > existingPriority) {
             stripeSubscriptions.set(email, {
               id: sub.id,
               status: sub.status, // trialing, active, canceled, past_due, etc.
@@ -87,6 +106,8 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+      
+      console.log(`Fetched ${stripeSubscriptions.size} unique subscriptions from Stripe`);
     } catch (stripeErr) {
       console.error("Failed to fetch Stripe subscriptions:", stripeErr);
     }
@@ -278,6 +299,8 @@ export async function GET(request: NextRequest) {
     
     // Subscriber lists for tabs - merge Firebase data with Stripe data for accuracy
     // First, enrich user data with Stripe subscription info
+    const firebaseEmails = new Set(users.map(u => (u.email || "").toLowerCase()));
+    
     const enrichedUsers = users.map(u => {
       const email = (u.email || "").toLowerCase();
       const stripeSub = stripeSubscriptions.get(email);
@@ -299,6 +322,29 @@ export async function GET(request: NextRequest) {
       }
       return u;
     });
+    
+    // Add Stripe subscribers who don't have Firebase accounts (paid but not registered)
+    // This ensures we show ALL subscribers from Stripe, not just those with Firebase accounts
+    for (const [email, stripeSub] of stripeSubscriptions.entries()) {
+      if (!firebaseEmails.has(email)) {
+        // Create a virtual user entry for this Stripe subscriber
+        enrichedUsers.push({
+          id: `stripe_${stripeSub.id}`,
+          email: email,
+          name: "",
+          subscriptionStatus: stripeSub.status,
+          subscriptionStartedAt: stripeSub.created,
+          trialEndsAt: stripeSub.trialEnd,
+          currentPeriodEnd: stripeSub.currentPeriodEnd,
+          stripeSubscriptionId: stripeSub.id,
+          subscriptionPlan: stripeSub.plan,
+          cancelAtPeriodEnd: stripeSub.cancelAtPeriodEnd,
+          canceledAt: stripeSub.canceledAt,
+          subscriptionCancelled: stripeSub.status === "canceled",
+          isStripeOnly: true, // Flag to indicate no Firebase account
+        });
+      }
+    }
     
     // Recalculate counts with enriched data
     // IMPORTANT: Only include users who have a verified Stripe subscription
@@ -325,6 +371,13 @@ export async function GET(request: NextRequest) {
       return hasStripeSubscription && u.subscriptionStatus === "canceled";
     });
     
+    // Past Due = status is "past_due" AND exists in Stripe
+    const enrichedPastDueSubscribers = enrichedUsers.filter(u => {
+      const email = (u.email || "").toLowerCase();
+      const hasStripeSubscription = stripeSubscriptions.has(email);
+      return hasStripeSubscription && u.subscriptionStatus === "past_due";
+    });
+    
     // NOW calculate MRR using Stripe-enriched data (accurate subscription status)
     mrr = enrichedActivePayingSubscribers.reduce((sum, u) => {
       // Legacy plans
@@ -347,8 +400,8 @@ export async function GET(request: NextRequest) {
     arr = mrr * 12;
     projectedArr = projectedMrr * 12;
     
-    // Update totalActiveSubscribers with enriched data
-    totalActiveSubscribers = enrichedActivePayingSubscribers.length + enrichedTrialingSubscribers.length;
+    // Update totalActiveSubscribers with enriched data (include past_due as they're still technically subscribed)
+    totalActiveSubscribers = enrichedActivePayingSubscribers.length + enrichedTrialingSubscribers.length + enrichedPastDueSubscribers.length;
     
     // Sync Firebase with Stripe data for users with mismatched status
     // This ensures Firebase stays in sync with Stripe (source of truth)
@@ -390,7 +443,7 @@ export async function GET(request: NextRequest) {
     
     // NOW calculate churn rate using Stripe-enriched data
     const enrichedChurnedCount = enrichedCancelledSubscribers.length;
-    const enrichedTotalEver = enrichedActivePayingSubscribers.length + enrichedTrialingSubscribers.length + enrichedChurnedCount;
+    const enrichedTotalEver = enrichedActivePayingSubscribers.length + enrichedTrialingSubscribers.length + enrichedPastDueSubscribers.length + enrichedChurnedCount;
     churnRate = enrichedTotalEver > 0
       ? ((enrichedChurnedCount / enrichedTotalEver) * 100).toFixed(1)
       : "0";
@@ -445,6 +498,16 @@ export async function GET(request: NextRequest) {
       status: "cancelled",
       startedAt: u.subscriptionStartedAt || null,
       cancelledAt: u.canceledAt || u.subscriptionEndedAt || null,
+    }));
+    
+    const pastDueSubscribersList = enrichedPastDueSubscribers.map(u => ({
+      id: u.id,
+      email: u.email || "Unknown",
+      name: u.name || "",
+      plan: u.subscriptionPlan || "Unknown",
+      status: "past_due",
+      startedAt: u.subscriptionStartedAt || null,
+      currentPeriodEnd: u.currentPeriodEnd || null,
     }));
     
     // Create a map of userId to user data for quick lookup
@@ -526,6 +589,8 @@ export async function GET(request: NextRequest) {
       activeSubscribersList,
       trialingSubscribersList,
       cancelledSubscribersList,
+      pastDueSubscribersList,
+      pastDueSubscribers: enrichedPastDueSubscribers.length,
       
       // Meta
       totalPayments: payments.length,
