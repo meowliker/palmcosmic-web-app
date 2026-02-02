@@ -142,43 +142,17 @@ export async function GET(request: NextRequest) {
       })
       .reduce((sum, p) => sum + getAmount(p), 0);
     
-    // MRR calculation - only count ACTIVE (paying) subscribers, not trialing
-    // Trialing users haven't converted yet, so they shouldn't inflate MRR
-    const activePayingSubscribers = users.filter(u => 
-      u.subscriptionStatus === "active" && !u.subscriptionCancelled
-    );
-    
-    const trialingSubscribers = users.filter(u => 
-      u.subscriptionStatus === "trialing" && !u.subscriptionCancelled
-    );
-    
     // Billing cycle conversion constants (mathematically correct)
     const WEEKLY_TO_MONTHLY = 52 / 12; // 4.333
     const BIWEEKLY_TO_MONTHLY = 26 / 12; // 2.1667
     const FOURWEEKLY_TO_MONTHLY = 13 / 12; // 1.0833
     
-    // Calculate MRR from actual paying subscribers only
-    const mrr = activePayingSubscribers.reduce((sum, u) => {
-      // Legacy plans
-      if (u.subscriptionPlan === "weekly") return sum + (4.99 * WEEKLY_TO_MONTHLY); // ~$21.65/month
-      if (u.subscriptionPlan === "monthly") return sum + 9.99;
-      if (u.subscriptionPlan === "yearly") return sum + (49.99 / 12);
-      // New trial plans (after trial, they pay recurring)
-      // Bi-weekly = 26 cycles/year, so monthly = price * (26/12) = price * 2.1667
-      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY); // ~$43.31/month
-      if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY); // ~$32.49/month
-      return sum;
-    }, 0);
-    
-    // Projected MRR includes trialing users (if they all convert)
-    const projectedMrr = trialingSubscribers.reduce((sum, u) => {
-      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
-      if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
-      return sum;
-    }, mrr);
-    
-    const arr = mrr * 12;
-    const projectedArr = projectedMrr * 12;
+    // NOTE: MRR calculation moved after Stripe enrichment to use accurate data
+    // Placeholder values - will be calculated after enrichment
+    let mrr = 0;
+    let projectedMrr = 0;
+    let arr = 0;
+    let projectedArr = 0;
     
     // Revenue growth rate
     const momGrowth = revenueLastMonth > 0 
@@ -203,8 +177,8 @@ export async function GET(request: NextRequest) {
       upsells: payments.filter(p => p.type === "upsell").reduce((sum, p) => sum + getAmount(p), 0),
     };
     
-    // Subscriber counts (includes both paying and trialing)
-    const totalActiveSubscribers = activePayingSubscribers.length + trialingSubscribers.length;
+    // Subscriber counts - placeholder, will be calculated after Stripe enrichment
+    let totalActiveSubscribers = 0;
     const newSubscribersThisMonth = users.filter(u => {
       const startedAt = u.subscriptionStartedAt ? new Date(u.subscriptionStartedAt) : null;
       return startedAt && startedAt >= startOfMonth && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing");
@@ -220,24 +194,19 @@ export async function GET(request: NextRequest) {
     const avgSubscriptionMonths = 6; // Estimate
     const ltv = (parseFloat(arpu) * avgSubscriptionMonths).toFixed(2);
     
-    // Churn rate
-    const churnRate = totalActiveSubscribers + churnedSubscribersCount > 0
-      ? ((churnedSubscribersCount / (totalActiveSubscribers + churnedSubscribersCount)) * 100).toFixed(1)
-      : "0";
-    
-    const retentionRate = (100 - parseFloat(churnRate)).toFixed(1);
+    // Churn rate - placeholder, will be recalculated after Stripe enrichment
+    let churnRate = "0";
+    let retentionRate = "100";
     
     // Payment status breakdown
     const successfulPayments = payments.filter(p => p.status === "succeeded" || !p.status).length;
     const failedPayments = payments.filter(p => p.status === "failed").length;
     const refunds = payments.filter(p => p.status === "refunded").length;
     
-    // Trial conversions - use trialEndsAt since trialStartedAt may not be set
-    const trialsStarted = users.filter(u => u.trialEndsAt || u.trialStartedAt).length;
-    const trialsConverted = users.filter(u => (u.trialEndsAt || u.trialStartedAt) && u.subscriptionStatus === "active").length;
-    const trialConversionRate = trialsStarted > 0 
-      ? ((trialsConverted / trialsStarted) * 100).toFixed(1)
-      : "0";
+    // Trial conversions - placeholder, will be recalculated after Stripe enrichment
+    let trialsStarted = 0;
+    let trialsConverted = 0;
+    let trialConversionRate = "0";
     
     // Upsell analytics - breakdown by offer type
     const upsellPayments = payments.filter(p => p.type === "upsell");
@@ -283,16 +252,14 @@ export async function GET(request: NextRequest) {
       revenueOverTime.push({ date: dateStr, revenue: dayRevenue });
     }
     
-    // Subscription distribution - include new trial-based plans
-    const subscriptionDistribution = {
-      // Legacy plans
-      weekly: users.filter(u => u.subscriptionPlan === "weekly" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
-      monthly: users.filter(u => u.subscriptionPlan === "monthly" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
-      yearly: users.filter(u => u.subscriptionPlan === "yearly" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
-      // New trial-based plans
-      "1week": users.filter(u => u.subscriptionPlan === "1week" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
-      "2week": users.filter(u => u.subscriptionPlan === "2week" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
-      "4week": users.filter(u => u.subscriptionPlan === "4week" && (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing") && !u.subscriptionCancelled).length,
+    // Subscription distribution - placeholder, will be recalculated after Stripe enrichment
+    let subscriptionDistribution = {
+      weekly: 0,
+      monthly: 0,
+      yearly: 0,
+      "1week": 0,
+      "2week": 0,
+      "4week": 0,
     };
     
     // Cancelled subscribers list
@@ -357,6 +324,98 @@ export async function GET(request: NextRequest) {
       const hasStripeSubscription = stripeSubscriptions.has(email);
       return hasStripeSubscription && u.subscriptionStatus === "canceled";
     });
+    
+    // NOW calculate MRR using Stripe-enriched data (accurate subscription status)
+    mrr = enrichedActivePayingSubscribers.reduce((sum, u) => {
+      // Legacy plans
+      if (u.subscriptionPlan === "weekly") return sum + (4.99 * WEEKLY_TO_MONTHLY);
+      if (u.subscriptionPlan === "monthly") return sum + 9.99;
+      if (u.subscriptionPlan === "yearly") return sum + (49.99 / 12);
+      // New trial plans (after trial, they pay recurring)
+      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
+      if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
+      return sum;
+    }, 0);
+    
+    // Projected MRR includes trialing users (if they all convert)
+    projectedMrr = enrichedTrialingSubscribers.reduce((sum, u) => {
+      if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
+      if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
+      return sum;
+    }, mrr);
+    
+    arr = mrr * 12;
+    projectedArr = projectedMrr * 12;
+    
+    // Update totalActiveSubscribers with enriched data
+    totalActiveSubscribers = enrichedActivePayingSubscribers.length + enrichedTrialingSubscribers.length;
+    
+    // Sync Firebase with Stripe data for users with mismatched status
+    // This ensures Firebase stays in sync with Stripe (source of truth)
+    const firebaseSyncPromises: Promise<any>[] = [];
+    for (const u of enrichedUsers) {
+      const email = (u.email || "").toLowerCase();
+      const stripeSub = stripeSubscriptions.get(email);
+      
+      if (stripeSub && u.id) {
+        // Check if Firebase status differs from Stripe status
+        const stripeStatus = stripeSub.status === "canceled" ? "cancelled" : stripeSub.status;
+        const firebaseStatus = u.subscriptionStatus;
+        
+        if (firebaseStatus !== stripeStatus && firebaseStatus !== "cancelled") {
+          // Update Firebase to match Stripe
+          const updateData: Record<string, any> = {
+            subscriptionStatus: stripeStatus,
+            updatedAt: new Date().toISOString(),
+          };
+          
+          if (stripeSub.status === "canceled") {
+            updateData.subscriptionCancelled = true;
+            updateData.subscriptionEndedAt = stripeSub.canceledAt || new Date().toISOString();
+            updateData.isSubscribed = false;
+          }
+          
+          firebaseSyncPromises.push(
+            adminDb.collection("users").doc(u.id).set(updateData, { merge: true })
+              .catch(err => console.error(`Failed to sync user ${u.id}:`, err))
+          );
+        }
+      }
+    }
+    
+    // Execute Firebase sync in background (don't wait)
+    if (firebaseSyncPromises.length > 0) {
+      Promise.all(firebaseSyncPromises).catch(err => console.error("Firebase sync errors:", err));
+    }
+    
+    // NOW calculate churn rate using Stripe-enriched data
+    const enrichedChurnedCount = enrichedCancelledSubscribers.length;
+    const enrichedTotalEver = enrichedActivePayingSubscribers.length + enrichedTrialingSubscribers.length + enrichedChurnedCount;
+    churnRate = enrichedTotalEver > 0
+      ? ((enrichedChurnedCount / enrichedTotalEver) * 100).toFixed(1)
+      : "0";
+    retentionRate = (100 - parseFloat(churnRate)).toFixed(1);
+    
+    // NOW calculate trial conversions using Stripe-enriched data
+    // Trials started = all users who have/had a trial (trialing + active who were trialing + cancelled who were trialing)
+    // For simplicity: count users in Stripe with trial_end set
+    trialsStarted = enrichedTrialingSubscribers.length + enrichedActivePayingSubscribers.length;
+    // Trials converted = users who are now "active" (completed trial and paying)
+    trialsConverted = enrichedActivePayingSubscribers.length;
+    trialConversionRate = trialsStarted > 0 
+      ? ((trialsConverted / trialsStarted) * 100).toFixed(1)
+      : "0";
+    
+    // NOW calculate subscription distribution using Stripe-enriched data
+    const allActiveAndTrialing = [...enrichedActivePayingSubscribers, ...enrichedTrialingSubscribers];
+    subscriptionDistribution = {
+      weekly: allActiveAndTrialing.filter(u => u.subscriptionPlan === "weekly").length,
+      monthly: allActiveAndTrialing.filter(u => u.subscriptionPlan === "monthly").length,
+      yearly: allActiveAndTrialing.filter(u => u.subscriptionPlan === "yearly").length,
+      "1week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "1week").length,
+      "2week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "2week").length,
+      "4week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "4week").length,
+    };
     
     const activeSubscribersList = enrichedActivePayingSubscribers.map(u => ({
       id: u.id,
