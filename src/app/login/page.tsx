@@ -253,39 +253,28 @@ export default function LoginPage() {
     setForgotLoading(true);
 
     try {
-      // First check if user exists
-      const checkResponse = await fetch("/api/auth/send-otp", {
+      // Send password reset email using custom API
+      const response = await fetch("/api/auth/send-password-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: forgotEmail }),
       });
 
-      const checkData = await checkResponse.json();
+      const data = await response.json();
 
-      if (checkData.error === "USER_NOT_FOUND") {
-        setNotFoundEmail(forgotEmail);
-        setShowForgotPassword(false);
-        setShowUserNotFound(true);
-        return;
+      if (!response.ok) {
+        if (data.error === "USER_NOT_FOUND") {
+          setNotFoundEmail(forgotEmail);
+          setShowForgotPassword(false);
+          setShowUserNotFound(true);
+          return;
+        }
+        throw new Error(data.message || data.error || "Failed to send reset email");
       }
-
-      // User exists, send password reset email
-      await sendPasswordResetEmail(auth, forgotEmail, {
-        url: `${window.location.origin}/reset-password`,
-        handleCodeInApp: false,
-      });
 
       setForgotSuccess(true);
     } catch (err: any) {
       console.error("Forgot password error:", err);
-      
-      if (err.code === "auth/user-not-found") {
-        setNotFoundEmail(forgotEmail);
-        setShowForgotPassword(false);
-        setShowUserNotFound(true);
-        return;
-      }
-      
       setForgotError(err.message || "Failed to send reset email. Please try again.");
     } finally {
       setForgotLoading(false);
