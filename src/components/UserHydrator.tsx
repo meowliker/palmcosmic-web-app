@@ -60,6 +60,28 @@ export default function UserHydrator() {
       const data: any = snap.data();
 
       setFirebaseUserId(userId);
+      
+      // Check subscription status and set cookie for middleware
+      const subStatus = data.subscriptionStatus;
+      const isCancelled = subStatus === "cancelled" || subStatus === "canceled" || data.subscriptionCancelled === true;
+      
+      if (isCancelled) {
+        // Set cookie to indicate subscription is cancelled
+        document.cookie = "pc_sub_cancelled=1; path=/; max-age=86400"; // 24 hours
+        
+        // Redirect to manage subscription if on a protected route
+        const protectedPaths = ["/dashboard", "/reports", "/chat", "/palm-reading", "/horoscope", "/birth-chart", "/compatibility", "/prediction-2026", "/profile", "/settings"];
+        const currentPath = window.location.pathname;
+        const isOnProtectedRoute = protectedPaths.some(p => currentPath.startsWith(p));
+        
+        if (isOnProtectedRoute) {
+          window.location.href = "/manage-subscription";
+          return;
+        }
+      } else {
+        // Clear the cancelled cookie if subscription is active
+        document.cookie = "pc_sub_cancelled=; path=/; max-age=0";
+      }
 
       if (Object.prototype.hasOwnProperty.call(data, "subscriptionPlan")) {
         setSubscriptionPlan(normalizePlan(data.subscriptionPlan));

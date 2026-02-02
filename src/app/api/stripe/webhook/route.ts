@@ -432,22 +432,31 @@ export async function POST(request: NextRequest) {
         
         if (userId) {
           const now = new Date().toISOString();
+          // Normalize Stripe's "canceled" to "cancelled" for consistency
+          const normalizedStatus = subData.status === "canceled" ? "cancelled" : subData.status;
+          
+          const updateData: Record<string, any> = {
+            stripeSubscriptionId: subscription.id,
+            stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : null,
+            subscriptionStatus: normalizedStatus,
+            subscriptionPlan: subData.metadata?.plan || subData.items?.data?.[0]?.price?.lookup_key || null,
+            currentPeriodEnd: subData.current_period_end
+              ? new Date(subData.current_period_end * 1000).toISOString()
+              : null,
+            updatedAt: now,
+          };
+          
+          // If status is canceled, also set cancellation flags
+          if (subData.status === "canceled") {
+            updateData.subscriptionCancelled = true;
+            updateData.subscriptionEndedAt = now;
+            updateData.isSubscribed = false;
+          }
+          
           await adminDb
             .collection("users")
             .doc(userId)
-            .set(
-              {
-                stripeSubscriptionId: subscription.id,
-                stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : null,
-                subscriptionStatus: subData.status,
-                subscriptionPlan: subData.metadata?.plan || subData.items?.data?.[0]?.price?.lookup_key || null,
-                currentPeriodEnd: subData.current_period_end
-                  ? new Date(subData.current_period_end * 1000).toISOString()
-                  : null,
-                updatedAt: now,
-              },
-              { merge: true }
-            );
+            .set(updateData, { merge: true });
         }
         break;
       }
