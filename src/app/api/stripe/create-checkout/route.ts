@@ -8,6 +8,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const TRIAL_PRICE_IDS: Record<string, string> = {
   "1week": process.env.STRIPE_PRICE_1WEEK_TRIAL!, // $1 trial
   "2week": process.env.STRIPE_PRICE_2WEEK_TRIAL!, // $5.49 trial
+  // A/B Test Variant B - Trial Prices
+  "1week-v2": process.env.STRIPE_PRICE_1WEEK_TRIAL_V2!, // $2.99 trial
+  "4week-v2": process.env.STRIPE_PRICE_4WEEK_TRIAL_V2!, // $7.99 trial
+  "12week-v2": process.env.STRIPE_PRICE_12WEEK_TRIAL_V2!, // $14.99 trial
 };
 
 // Recurring subscription prices (after trial ends)
@@ -15,6 +19,10 @@ const SUBSCRIPTION_PRICE_IDS: Record<string, string> = {
   "1week": process.env.STRIPE_PRICE_2WEEK_PLAN!,  // $19.99 every 2 weeks
   "2week": process.env.STRIPE_PRICE_2WEEK_PLAN!,  // $19.99 every 2 weeks
   "yearly": process.env.STRIPE_PRICE_YEARLY2!,    // $49.99 yearly (no trial)
+  // A/B Test Variant B - All convert to $49.99/month
+  "1week-v2": process.env.STRIPE_PRICE_MONTHLY_V2!,  // $49.99/month
+  "4week-v2": process.env.STRIPE_PRICE_MONTHLY_V2!,  // $49.99/month
+  "12week-v2": process.env.STRIPE_PRICE_MONTHLY_V2!, // $49.99/month
 };
 
 // Trial periods in days for each plan
@@ -22,6 +30,10 @@ const TRIAL_DAYS: Record<string, number> = {
   "1week": 7,   // 1-week trial
   "2week": 14,  // 2-week trial
   "yearly": 0,  // No trial for yearly
+  // A/B Test Variant B - Trial periods
+  "1week-v2": 7,   // 1-week trial
+  "4week-v2": 28,  // 4-week trial
+  "12week-v2": 84, // 12-week trial
 };
 
 // Legacy price IDs for backward compatibility
@@ -41,8 +53,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ skip: true, message: "Stripe not configured" });
     }
 
-    // Check if it's a new trial plan, yearly plan, or legacy plan
+    // Check if it's a new trial plan, yearly plan, variant B plan, or legacy plan
     const isNewTrialPlan = ["1week", "2week"].includes(plan);
+    const isVariantBPlan = ["1week-v2", "4week-v2", "12week-v2"].includes(plan);
     const isYearlyPlan = plan === "yearly";
     
     // Get the base URL - use request origin as fallback
@@ -90,8 +103,8 @@ export async function POST(request: NextRequest) {
           },
         },
       };
-    } else if (isNewTrialPlan) {
-      // New trial-based pricing: create subscription with trial period and upfront fee
+    } else if (isNewTrialPlan || isVariantBPlan) {
+      // Trial-based pricing: create subscription with trial period and upfront fee
       const subscriptionPriceId = SUBSCRIPTION_PRICE_IDS[plan];
       const trialPriceId = TRIAL_PRICE_IDS[plan];
       
@@ -109,6 +122,12 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+
+      // Determine A/B test variant
+      const abVariant = isVariantBPlan ? "B" : "A";
+      const cancelUrl = isVariantBPlan 
+        ? `${baseUrl}/onboarding/a-step-17` 
+        : `${baseUrl}/onboarding/step-17`;
 
       // Use payment mode for the trial fee (one-time charge)
       // After successful payment, we'll create the subscription via webhook
@@ -130,13 +149,14 @@ export async function POST(request: NextRequest) {
         // Critical: Force customer creation instead of guest checkout
         customer_creation: "always",
         success_url: `${baseUrl}/onboarding/step-18?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/onboarding/step-17`,
+        cancel_url: cancelUrl,
         metadata: {
           userId: userId || "",
           plan,
           type: "trial_payment",
           subscriptionPriceId: subscriptionPriceId,
           trialDays: String(TRIAL_DAYS[plan]),
+          abVariant, // Track A/B test variant
         },
       };
     } else {

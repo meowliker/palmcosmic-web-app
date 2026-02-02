@@ -31,6 +31,12 @@ const subscriptionPlans = [
     period: "/year",
     bestValue: true,
   },
+  {
+    id: "monthly-v2-plan",
+    name: "Monthly Plan",
+    price: "$49.99",
+    period: "/month",
+  },
 ];
 
 // Map trial plans to their corresponding recurring plans
@@ -42,6 +48,10 @@ const trialToRecurringPlan: Record<string, string> = {
   "monthly": "monthly-plan",
   "yearly": "yearly-plan",
   "Yearly2": "yearly-plan", // New yearly plan
+  // A/B Test Variant B plans - all convert to $49.99/month
+  "1week-v2": "monthly-v2-plan",
+  "4week-v2": "monthly-v2-plan",
+  "12week-v2": "monthly-v2-plan",
 };
 
 export default function ManageSubscriptionPage() {
@@ -83,10 +93,11 @@ export default function ManageSubscriptionPage() {
     if (pLower === "2week-plan") return "2week-plan";
     if (pLower === "monthly-plan") return "monthly-plan";
     if (pLower === "yearly-plan") return "yearly-plan";
+    if (pLower === "monthly-v2-plan") return "monthly-v2-plan";
     return null;
   };
 
-  const normalizePlan = (plan: any): "1week" | "2week" | "4week" | "weekly" | "monthly" | "yearly" | "Yearly2" | null => {
+  const normalizePlan = (plan: any): "1week" | "2week" | "4week" | "weekly" | "monthly" | "yearly" | "Yearly2" | "1week-v2" | "4week-v2" | "12week-v2" | null => {
     if (!plan) return null;
     const p = String(plan).trim();
     const pLower = p.toLowerCase();
@@ -96,6 +107,10 @@ export default function ManageSubscriptionPage() {
     if (pLower === "4week") return "4week";
     // Yearly2 plan (case-sensitive)
     if (p === "Yearly2") return "Yearly2";
+    // A/B Test Variant B plans
+    if (p === "1week-v2") return "1week-v2";
+    if (p === "4week-v2") return "4week-v2";
+    if (p === "12week-v2") return "12week-v2";
     // Legacy plans
     if (pLower === "weekly" || pLower.includes("week")) return "weekly";
     if (pLower === "monthly" || pLower.includes("month")) return "monthly";
@@ -203,6 +218,8 @@ export default function ManageSubscriptionPage() {
     const rawPlan = subscriptionStatus.rawPlan;
     if (rawPlan === "4week") return "$29.99/month";
     if (rawPlan === "Yearly2" || rawPlan === "yearly") return "$49.99/year";
+    // A/B Test Variant B plans - all convert to $49.99/month
+    if (rawPlan === "1week-v2" || rawPlan === "4week-v2" || rawPlan === "12week-v2") return "$49.99/month";
     return "$19.99/2 weeks";
   };
 

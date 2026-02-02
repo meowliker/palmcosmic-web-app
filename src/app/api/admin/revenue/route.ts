@@ -389,6 +389,8 @@ export async function GET(request: NextRequest) {
       // New trial plans (after trial, they pay recurring)
       if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
       if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
+      // A/B Test Variant B plans - all convert to $49.99/month
+      if (u.subscriptionPlan === "1week-v2" || u.subscriptionPlan === "4week-v2" || u.subscriptionPlan === "12week-v2") return sum + 49.99;
       return sum;
     }, 0);
     
@@ -396,6 +398,8 @@ export async function GET(request: NextRequest) {
     projectedMrr = enrichedTrialingSubscribers.reduce((sum, u) => {
       if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
       if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
+      // A/B Test Variant B plans - all convert to $49.99/month
+      if (u.subscriptionPlan === "1week-v2" || u.subscriptionPlan === "4week-v2" || u.subscriptionPlan === "12week-v2") return sum + 49.99;
       // Yearly2 has no trial, so it won't be in trialing list
       return sum;
     }, mrr);
@@ -472,6 +476,30 @@ export async function GET(request: NextRequest) {
       "2week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "2week").length,
       "4week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "4week").length,
       "Yearly2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "Yearly2").length,
+      // A/B Test Variant B plans
+      "1week-v2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "1week-v2").length,
+      "4week-v2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "4week-v2").length,
+      "12week-v2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "12week-v2").length,
+    };
+    
+    // A/B Test breakdown
+    const abTestBreakdown = {
+      variantA: {
+        subscribers: allActiveAndTrialing.filter(u => u.abTestVariant === "A" || !u.abTestVariant).length,
+        plans: {
+          "1week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "1week").length,
+          "2week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "2week").length,
+          "Yearly2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "Yearly2").length,
+        },
+      },
+      variantB: {
+        subscribers: allActiveAndTrialing.filter(u => u.abTestVariant === "B").length,
+        plans: {
+          "1week-v2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "1week-v2").length,
+          "4week-v2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "4week-v2").length,
+          "12week-v2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "12week-v2").length,
+        },
+      },
     };
     
     const activeSubscribersList = enrichedActivePayingSubscribers.map(u => ({
@@ -580,6 +608,9 @@ export async function GET(request: NextRequest) {
       // Charts data
       revenueOverTime,
       subscriptionDistribution,
+      
+      // A/B Test breakdown
+      abTestBreakdown,
       
       // Upsell analytics
       upsellBreakdown,

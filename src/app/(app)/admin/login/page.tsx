@@ -31,7 +31,7 @@ export default function AdminLoginPage() {
         // Store admin session token
         localStorage.setItem("admin_session_token", data.token);
         localStorage.setItem("admin_session_expiry", data.expiry);
-        router.push("/admin/revenue");
+        router.push("/admin");
       } else {
         setError(data.error || "Invalid credentials");
       }

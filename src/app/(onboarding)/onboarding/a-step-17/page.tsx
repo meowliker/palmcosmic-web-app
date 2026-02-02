@@ -19,7 +19,6 @@ const predictionLabels = [
   { text: "Big change at", emoji: "✨", top: "55%", left: "15%", rotation: -10 },
 ];
 
-// Generate random stats with some variation for authenticity
 function generateRandomStats() {
   const baseStats = [
     { label: "Love", color: "#EF6B6B", min: 72, max: 95 },
@@ -34,7 +33,6 @@ function generateRandomStats() {
   }));
 }
 
-// Zodiac data
 const zodiacSigns = [
   { name: "Aries", symbol: "♈", element: "Fire", dates: "Mar 21 - Apr 19" },
   { name: "Taurus", symbol: "♉", element: "Earth", dates: "Apr 20 - May 20" },
@@ -51,14 +49,11 @@ const zodiacSigns = [
 ];
 
 function getZodiacFromBirthYear(birthYear: string | null): typeof zodiacSigns[0] {
-  // Since we only have birth year, we'll use a simple calculation
-  // In reality, you'd need birth month/day for accurate zodiac
   if (!birthYear) return zodiacSigns[0];
   const year = parseInt(birthYear);
   return zodiacSigns[year % 12];
 }
 
-// Generate compatibility stats
 function generateCompatibilityStats() {
   return [
     { label: "Sexual", color: "#EF6B6B", value: Math.floor(Math.random() * 15) + 85 },
@@ -68,7 +63,6 @@ function generateCompatibilityStats() {
   ];
 }
 
-// Testimonials data
 const testimonials = [
   {
     name: "James",
@@ -93,7 +87,6 @@ const testimonials = [
   },
 ];
 
-// Scrolling emails for social proof
 const scrollingEmails = [
   "Kevin***@protonmail.com",
   "Alice***@zoho.com",
@@ -103,44 +96,44 @@ const scrollingEmails = [
   "David***@icloud.com",
 ];
 
+// A/B Test Variant B - New pricing plans
 const pricingPlans = [
   {
-    id: "1week",
+    id: "1week-v2",
     name: "1-Week Trial",
-    trialPrice: "$1",
-    perDayPrice: "$0.14",
-    originalPrice: "$4.99",
+    trialPrice: "$2.99",
+    perDayPrice: "$0.42",
+    originalPrice: "$9.99",
     trialDays: 7,
-    afterTrialPrice: "$19.99",
-    afterTrialPeriod: "2-Week Plan",
+    afterTrialPrice: "$49.99",
+    afterTrialPeriod: "Monthly",
   },
   {
-    id: "2week",
-    name: "2-Week Trial",
-    trialPrice: "$5.49",
-    perDayPrice: "$0.39",
-    originalPrice: "$10.99",
-    trialDays: 14,
-    afterTrialPrice: "$19.99",
-    afterTrialPeriod: "2-Week Plan",
+    id: "4week-v2",
+    name: "4-Week Trial",
+    trialPrice: "$7.99",
+    perDayPrice: "$0.27",
+    originalPrice: "$19.99",
+    trialDays: 28,
+    afterTrialPrice: "$49.99",
+    afterTrialPeriod: "Monthly",
     popular: true,
   },
   {
-    id: "yearly",
-    name: "Yearly Plan",
-    trialPrice: "$49.99",
-    perDayPrice: "$0.13",
-    originalPrice: "$519.74",
-    trialDays: 0,
+    id: "12week-v2",
+    name: "12-Week Trial",
+    trialPrice: "$14.99",
+    perDayPrice: "$0.17",
+    originalPrice: "$29.99",
+    trialDays: 84,
     afterTrialPrice: "$49.99",
-    afterTrialPeriod: "Yearly",
-    bestValue: true,
+    afterTrialPeriod: "Monthly",
   },
 ];
 
-export default function Step17Page() {
+export default function AStep17Page() {
   const router = useRouter();
-  const [selectedPlan, setSelectedPlan] = useState<string>("2week");
+  const [selectedPlan, setSelectedPlan] = useState<string>("4week-v2");
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [paymentError, setPaymentError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -152,18 +145,14 @@ export default function Step17Page() {
   const [readingStats, setReadingStats] = useState<Array<{label: string; color: string; value: number}>>([]);
   const [compatibilityStats, setCompatibilityStats] = useState<Array<{label: string; color: string; value: number}>>([]);
   
-  // Get user data from onboarding store
   const { gender, birthYear, birthMonth, birthDay, sunSign, moonSign, ascendantSign } = useOnboardingStore();
   const { firebaseUserId } = useUserStore();
   
-  // Refs for sticky CTA visibility
   const birthChartSectionRef = useRef<HTMLDivElement>(null);
   const getFullReportRef = useRef<HTMLButtonElement>(null);
   
-  // Default zodiac sign for SSR fallback
   const defaultZodiac = { name: "Aries", symbol: "♈", element: "Fire", description: "" };
   
-  // Use stored zodiac signs or fallback to calculated one
   const zodiacSign = useMemo(() => {
     if (sunSign) return sunSign;
     const calculated = getZodiacFromBirthYear(birthYear);
@@ -184,90 +173,46 @@ export default function Step17Page() {
     const handlePageShow = () => setIsProcessing(false);
     window.addEventListener("pageshow", handlePageShow);
     
-    // Route protection: Check if user has already completed payment
     const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
     const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
     
     if (hasCompletedRegistration) {
-      // User has completed registration - redirect to app
       router.replace("/home");
       return;
     } else if (hasCompletedPayment) {
-      // User has paid but not registered - redirect to upsell page
       router.replace("/onboarding/step-18");
       return;
     }
     
-    // A/B Test: Check if user should see variant B
-    const checkABTest = async () => {
-      try {
-        // Check if user already has an assigned variant
-        const existingVariant = localStorage.getItem("palmcosmic_ab_variant");
-        if (existingVariant === "B") {
-          router.replace("/onboarding/a-step-17");
-          return;
-        }
-        
-        // Get or create visitor ID
-        let visitorId = localStorage.getItem("palmcosmic_visitor_id");
-        if (!visitorId) {
-          visitorId = generateUserId();
-          localStorage.setItem("palmcosmic_visitor_id", visitorId);
-        }
-        
-        // Get A/B test assignment
-        const response = await fetch(`/api/ab-test?testId=pricing-test-1&visitorId=${visitorId}`);
-        const data = await response.json();
-        
-        if (data.variant === "B") {
-          localStorage.setItem("palmcosmic_ab_variant", "B");
-          router.replace("/onboarding/a-step-17");
-          return;
-        } else {
-          localStorage.setItem("palmcosmic_ab_variant", "A");
-        }
-        
-        // Track impression for variant A (only once per session to avoid duplicate counts)
-        const impressionKey = "palmcosmic_ab_impression_A";
-        if (!sessionStorage.getItem(impressionKey)) {
-          sessionStorage.setItem(impressionKey, "true");
-          fetch("/api/ab-test/event", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              testId: "pricing-test-1",
-              variant: "A",
-              eventType: "impression",
-              visitorId,
-            }),
-          }).catch(() => {});
-        }
-      } catch (err) {
-        console.error("A/B test check failed:", err);
-        // Default to variant A on error
-        localStorage.setItem("palmcosmic_ab_variant", "A");
-      }
-    };
+    // Track A/B test impression (only once per session to avoid duplicate counts)
+    const impressionKey = "palmcosmic_ab_impression_B";
+    if (!sessionStorage.getItem(impressionKey)) {
+      sessionStorage.setItem(impressionKey, "true");
+      fetch("/api/ab-test/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: "pricing-test-1",
+          variant: "B",
+          eventType: "impression",
+          visitorId: localStorage.getItem("palmcosmic_visitor_id") || generateUserId(),
+        }),
+      }).catch(() => {});
+    }
     
-    checkABTest();
+    pixelEvents.viewContent("Subscription Plans V2", "pricing");
     
-    // Track ViewContent when user sees pricing page
-    pixelEvents.viewContent("Subscription Plans", "pricing");
-    
-    // Load palm image from localStorage
     const savedImage = localStorage.getItem("palmcosmic_palm_image");
     if (savedImage) {
       setPalmImage(savedImage);
     }
     
-    // Generate stats on client-side only to prevent hydration errors
     setReadingStats(generateRandomStats());
     setCompatibilityStats(generateCompatibilityStats());
     
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, [router]);
 
-  // Intersection observer for testimonial and birth chart sections sticky CTA
   useEffect(() => {
     let isInTestimonialOrBirthChart = false;
     let isGetFullReportVisible = false;
@@ -308,7 +253,6 @@ export default function Step17Page() {
     };
   }, []);
 
-  // Crop palm image to focus on hand
   useEffect(() => {
     if (!palmImage) return;
 
@@ -377,13 +321,12 @@ export default function Step17Page() {
     setPaymentError("");
     setIsProcessing(true);
     
-    // Track trial initiation
-    const plan = selectedPlan || "2week";
-    const planPrice = plan === "1week" ? 1 : plan === "2week" ? 5.49 : 9.99;
+    const plan = selectedPlan || "4week-v2";
+    const planPrice = plan === "1week-v2" ? 2.99 : plan === "4week-v2" ? 7.99 : 14.99;
     const planName = `${plan} Trial`;
     
-    // Save selected plan to localStorage for Purchase tracking on success page
     localStorage.setItem("palmcosmic_selected_plan", plan);
+    localStorage.setItem("palmcosmic_ab_variant", "B");
     
     // Track A/B test checkout_started event
     fetch("/api/ab-test/event", {
@@ -391,19 +334,17 @@ export default function Step17Page() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         testId: "pricing-test-1",
-        variant: "A",
+        variant: "B",
         eventType: "checkout_started",
         visitorId: localStorage.getItem("palmcosmic_visitor_id") || generateUserId(),
         metadata: { plan, price: planPrice },
       }),
     }).catch(() => {});
     
-    // Track AddToCart when user clicks "Start Trial"
     pixelEvents.addToCart(planPrice, planName);
     pixelEvents.startTrial(planPrice);
 
     try {
-      // Create Stripe checkout session
       const response = await fetch("/api/stripe/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -411,25 +352,20 @@ export default function Step17Page() {
           plan: selectedPlan,
           userId: firebaseUserId || generateUserId(),
           email: localStorage.getItem("palmcosmic_email") || "",
-          abVariant: "A", // Track A/B test variant
+          abVariant: "B",
         }),
       });
 
       const data = await response.json();
 
       if (data.url) {
-        // Track InitiateCheckout before redirecting to Stripe
         pixelEvents.initiateCheckout(planPrice, [planName]);
-        // Track AddPaymentInfo - user is entering payment flow
         pixelEvents.addPaymentInfo(planPrice, planName);
-        // Redirect to Stripe Checkout
         window.location.href = data.url;
       } else if (data.error) {
-        // Show error message on the paywall
         setPaymentError(data.error);
         setIsProcessing(false);
       } else {
-        // No URL returned - show generic error
         setPaymentError("Unable to start checkout. Please try again.");
         setIsProcessing(false);
       }
@@ -438,6 +374,18 @@ export default function Step17Page() {
       setPaymentError("Something went wrong. Please try again.");
       setIsProcessing(false);
     }
+  };
+
+  const getTrialDays = () => {
+    if (selectedPlan === "1week-v2") return "7-day";
+    if (selectedPlan === "4week-v2") return "28-day";
+    return "84-day";
+  };
+
+  const getTrialPrice = () => {
+    if (selectedPlan === "1week-v2") return "$2.99";
+    if (selectedPlan === "4week-v2") return "$7.99";
+    return "$14.99";
   };
 
   return (
@@ -449,7 +397,6 @@ export default function Step17Page() {
     >
       {/* Section 1: Palm Reading Ready - Full Screen */}
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-8">
-        {/* Header with Logo */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -477,17 +424,14 @@ export default function Step17Page() {
           Is Ready!
         </motion.p>
 
-        {/* Palm with prediction labels */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
           className="relative w-72 h-80 mb-8"
         >
-          {/* Circular glow background */}
           <div className="absolute inset-0 rounded-full bg-gradient-to-b from-primary/20 via-primary/10 to-transparent blur-2xl" />
           
-          {/* Dark circle container */}
           <div className="absolute inset-4 rounded-full bg-card/80 border border-border/50 overflow-hidden flex items-center justify-center">
             {croppedPalmImage ? (
               <img
@@ -504,7 +448,6 @@ export default function Step17Page() {
             )}
           </div>
 
-          {/* Prediction labels */}
           {predictionLabels.map((label, index) => (
             <motion.div
               key={label.text}
@@ -525,7 +468,6 @@ export default function Step17Page() {
           ))}
         </motion.div>
 
-        {/* Get My Prediction Button */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -542,19 +484,27 @@ export default function Step17Page() {
         </motion.div>
       </div>
 
-      {/* Section 2: Payment Section - Full Screen with peek of palm section */}
+      {/* Section 2: Payment Section */}
       <div ref={paymentSectionRef} className="min-h-screen flex flex-col items-center px-6 pt-4 pb-8">
-        {/* Complete Your Purchase heading */}
         <motion.h2
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="text-xl font-bold text-center mb-6"
+          className="text-xl font-bold text-center mb-2"
         >
-          Complete Your Purchase
+          Choose your plan
         </motion.h2>
+        
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="text-lg font-semibold text-cyan-400 mb-6"
+        >
+          with 70% OFF
+        </motion.p>
 
-        {/* Pricing plans */}
+        {/* Pricing plans - Variant B Style */}
         <div className="w-full max-w-sm space-y-3 mb-6">
           {pricingPlans.map((plan, index) => (
             <motion.button
@@ -570,13 +520,8 @@ export default function Step17Page() {
               }`}
             >
               {plan.popular && (
-                <span className="absolute -top-3 left-4 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
+                <span className="absolute -top-3 left-4 bg-cyan-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
                   Most popular
-                </span>
-              )}
-              {(plan as any).bestValue && (
-                <span className="absolute -top-3 left-4 bg-green-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                  Best value
                 </span>
               )}
 
@@ -588,13 +533,11 @@ export default function Step17Page() {
                     {" "}
                     <span className="text-muted-foreground line-through">{plan.originalPrice}</span>
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {(plan as any).yearlyEquivalent}
-                  </p>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-2xl font-bold">{(plan as any).perDayPrice}</span>
+                <div className="text-right bg-slate-700/50 rounded-lg px-3 py-2">
+                  <span className="text-xs text-muted-foreground line-through block">${(parseFloat(plan.perDayPrice.replace('$', '')) * 1.5).toFixed(2)}</span>
+                  <span className="text-xl font-bold text-white">{plan.perDayPrice}</span>
                   <p className="text-xs text-muted-foreground">
                     per day
                   </p>
@@ -611,7 +554,6 @@ export default function Step17Page() {
           transition={{ delay: 0.5 }}
           className="w-full max-w-sm mb-4"
         >
-{/* Payment Error Message */}
           {paymentError && (
             <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
               <p className="text-red-400 text-sm text-center">{paymentError}</p>
@@ -624,7 +566,7 @@ export default function Step17Page() {
             className="w-full h-14 text-lg font-semibold"
             size="lg"
           >
-            {isProcessing ? "Processing..." : selectedPlan === "yearly" ? "Subscribe Now" : "Start Trial and Continue"}
+            {isProcessing ? "Processing..." : "Start Trial and Continue"}
           </Button>
         </motion.div>
 
@@ -651,9 +593,7 @@ export default function Step17Page() {
               <a href="/Terms/terms-of-service.html" target="_blank" className="text-primary underline">Terms of Service</a>,{" "}
               <a href="/Terms/billing-terms.html" target="_blank" className="text-primary underline">Billing Terms</a> and{" "}
               <a href="/Terms/money-back-policy.html" target="_blank" className="text-primary underline">Money-back Policy</a>.
-              {selectedPlan === "yearly" 
-                ? " Subscribe for $49.99/year. You'll be charged $49.99 yearly until canceled."
-                : ` Start your ${selectedPlan === "1week" ? "7-day" : "14-day"} trial for ${selectedPlan === "1week" ? "$1" : "$5.49"}. After the trial, you'll be charged $19.99 every 2 weeks until canceled.`}
+              {` Start your ${getTrialDays()} trial for ${getTrialPrice()}. After the trial, you'll be charged $49.99 every month starting from ${new Date(Date.now() + (selectedPlan === "1week-v2" ? 7 : selectedPlan === "4week-v2" ? 28 : 84) * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} until canceled.`}
               {" "}By completing your purchase, you consent to us securely storing your payment details for future charges. No refunds for partial periods. You can cancel subscription anytime via account settings or by contacting support at weatpalmcosmic@gmail.com.
             </span>
           </label>
@@ -671,7 +611,6 @@ export default function Step17Page() {
             <span className="text-sm">Guaranteed safe checkout</span>
           </div>
 
-          {/* Payment icons */}
           <div className="flex items-center gap-2">
             <div className="w-10 h-6 bg-[#1A1F71] rounded flex items-center justify-center">
               <span className="text-white text-xs font-bold">VISA</span>
@@ -698,7 +637,6 @@ export default function Step17Page() {
           transition={{ delay: 0.8 }}
           className="w-full max-w-sm bg-card/50 backdrop-blur-sm border border-border rounded-2xl p-5 mb-8"
         >
-          {/* Palm image with stats overlay */}
           <div className="relative w-full h-48 rounded-xl overflow-hidden mb-4 bg-gradient-to-b from-muted/50 to-muted">
             {palmImage ? (
               <img
@@ -719,7 +657,6 @@ export default function Step17Page() {
 
           <h3 className="text-lg font-semibold text-center mb-4">Your palm reading</h3>
 
-          {/* Stats bars */}
           <div className="space-y-3 mb-4">
             {readingStats.map((stat, index) => (
               <div key={stat.label} className="flex items-center gap-3">
@@ -742,7 +679,6 @@ export default function Step17Page() {
             ))}
           </div>
 
-          {/* Reading descriptions */}
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
               Your <span className="text-[#EF6B6B] font-medium">Heart Line</span> shows that you are very passionate and freely express your thoughts and feelings.
@@ -753,7 +689,6 @@ export default function Step17Page() {
             <p className="text-primary cursor-pointer">More data in the full report</p>
           </div>
 
-          {/* Get Full Report Button */}
           <Button
             onClick={scrollToPayment}
             className="w-full h-12 text-base font-semibold mt-4 bg-blue-500 hover:bg-blue-600"
@@ -770,10 +705,8 @@ export default function Step17Page() {
           transition={{ delay: 0.9 }}
           className="w-full max-w-sm p-8 mb-8"
         >
-          {/* Elysia image with gradient ring only */}
           <div className="flex justify-center mb-6">
             <div className="relative">
-              {/* Gradient glow behind */}
               <div className="absolute inset-0 rounded-full bg-gradient-to-b from-purple-500/30 via-amber-500/20 to-transparent blur-xl scale-150" />
               <div className="relative w-28 h-28 rounded-full bg-gradient-to-b from-amber-600/80 via-amber-700/60 to-purple-900/80 p-1 border border-amber-500/50">
                 <div className="w-full h-full rounded-full overflow-hidden">
@@ -806,25 +739,20 @@ export default function Step17Page() {
           transition={{ delay: 1.0 }}
           className="w-full max-w-sm mb-8"
         >
-          {/* "This card was made for you" header with arrow */}
           <div className="relative bg-white rounded-2xl p-4 mb-2">
             <h4 className="text-lg font-semibold text-slate-900 text-center mb-1">This card was made for you</h4>
             <p className="text-xs text-slate-500 text-center">Explore your astrological self</p>
-            {/* Arrow pointing down to card */}
             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" />
           </div>
 
-          {/* Zodiac Card */}
           <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
             <h4 className="text-lg font-bold text-center mb-1">You</h4>
             <p className="text-sm text-muted-foreground text-center mb-6">
               {zodiacSign.name} • {zodiacSign.element}
             </p>
 
-            {/* Zodiac symbol in center with glow effect */}
             <div className="flex justify-center mb-8">
               <div className="relative">
-                {/* Glow effect behind */}
                 <div className="absolute inset-0 rounded-full bg-purple-500/30 blur-xl scale-150" />
                 <div className="relative w-28 h-28 rounded-full bg-gradient-to-b from-slate-600/50 to-slate-700/50 border border-slate-500/50 flex items-center justify-center">
                   <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-lg">
@@ -834,7 +762,6 @@ export default function Step17Page() {
               </div>
             </div>
 
-            {/* Modality and Polarity */}
             <div className="flex justify-between mb-8 px-4">
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto rounded-xl bg-gradient-to-br from-purple-500/80 to-purple-700/80 flex items-center justify-center mb-2">
@@ -852,7 +779,6 @@ export default function Step17Page() {
               </div>
             </div>
 
-            {/* Moon, Sun, Ascendant */}
             <div className="flex justify-between px-2">
               <div className="text-center">
                 <div className="w-10 h-10 mx-auto rounded-lg bg-gradient-to-br from-purple-500/70 to-purple-700/70 flex items-center justify-center mb-2">
@@ -889,19 +815,16 @@ export default function Step17Page() {
           <h3 className="text-xl font-bold text-center mb-6">Your compatibility profile</h3>
 
           <div className="flex gap-4 mb-6">
-            {/* Zodiac image with percentage */}
             <div className="relative flex-shrink-0">
               <div className="w-24 h-24 rounded-full bg-gradient-to-b from-slate-700 to-slate-800 border border-slate-600 flex items-center justify-center overflow-hidden">
                 <span className="text-4xl">{zodiacSign.symbol}</span>
               </div>
-              {/* Percentage badge */}
               <div className="absolute -top-1 -right-1 w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center">
                 <span className="text-xs font-bold text-white">{compatibilityStats[0]?.value || 85}%</span>
               </div>
               <p className="text-sm text-center mt-2">{zodiacSign.name}</p>
             </div>
 
-            {/* Compatibility bars */}
             <div className="flex-1 space-y-3">
               {compatibilityStats.map((stat, index) => (
                 <div key={stat.label} className="space-y-1">
@@ -923,7 +846,6 @@ export default function Step17Page() {
             </div>
           </div>
 
-          {/* Best matches message */}
           <div className="bg-card/50 rounded-xl p-4 mb-4">
             <p className="text-sm text-center">
               We know which zodiac signs are <span className="text-primary font-semibold">your best matches</span> for love, marriage, and friendship
@@ -943,7 +865,6 @@ export default function Step17Page() {
             </div>
           </div>
 
-          {/* Love and Marriage insights */}
           <div className="space-y-4 mb-4">
             <div className="flex gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500/30 to-orange-500/30 flex items-center justify-center flex-shrink-0">
@@ -976,7 +897,6 @@ export default function Step17Page() {
 
         {/* Testimonial Section */}
         <div ref={testimonialSectionRef} className="w-full max-w-sm mb-8">
-          {/* Trustpilot Rating */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -996,14 +916,12 @@ export default function Step17Page() {
             </div>
           </motion.div>
 
-          {/* World map background with stats */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.3 }}
             className="relative bg-gradient-to-b from-blue-900/30 to-slate-900/50 rounded-2xl p-6 mb-4 overflow-hidden"
           >
-            {/* Dotted world map effect */}
             <div className="absolute inset-0 opacity-20" style={{
               backgroundImage: `radial-gradient(circle, #3b82f6 1px, transparent 1px)`,
               backgroundSize: '8px 8px'
@@ -1015,7 +933,6 @@ export default function Step17Page() {
             </div>
           </motion.div>
 
-          {/* Scrolling emails */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1034,7 +951,6 @@ export default function Step17Page() {
             </div>
           </motion.div>
 
-          {/* Testimonial Cards */}
           <div className="space-y-4">
             {testimonials.map((testimonial, index) => (
               <motion.div
@@ -1086,7 +1002,6 @@ export default function Step17Page() {
           >
             <h3 className="text-xl font-bold text-center mb-6">Your birth chart analysis</h3>
 
-            {/* Message bubble with Elysia */}
             <div className="relative bg-white rounded-2xl p-4 mb-4">
               <p className="text-sm text-slate-700 text-center">
                 Your chart shows a <span className="text-cyan-500 font-medium">rare spark</span> — let&apos;s uncover how you can use this power!
@@ -1094,7 +1009,6 @@ export default function Step17Page() {
               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" />
             </div>
 
-            {/* Elysia avatar */}
             <div className="flex justify-center mb-6">
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-500/50">
                 <img
@@ -1108,14 +1022,10 @@ export default function Step17Page() {
               </div>
             </div>
 
-            {/* Zodiac Wheel Placeholder */}
             <div className="flex justify-center mb-6">
               <div className="relative w-48 h-48">
-                {/* Outer glow */}
                 <div className="absolute inset-0 rounded-full bg-gradient-to-b from-cyan-500/20 to-transparent blur-xl" />
-                {/* Wheel background */}
                 <div className="relative w-full h-full rounded-full bg-gradient-to-b from-slate-700 to-slate-800 border border-slate-600 flex items-center justify-center">
-                  {/* Inner circle with zodiac symbols */}
                   <div className="w-36 h-36 rounded-full bg-slate-900/80 border border-slate-600 flex items-center justify-center">
                     <div className="text-center">
                       <span className="text-3xl">{zodiacSign.symbol}</span>
@@ -1126,7 +1036,6 @@ export default function Step17Page() {
               </div>
             </div>
 
-            {/* Moon, Sun, Ascendant */}
             <div className="flex justify-between px-4 mb-8">
               <div className="text-center">
                 <span className="text-2xl text-cyan-400">{userMoonSign.symbol}</span>
@@ -1145,7 +1054,6 @@ export default function Step17Page() {
               </div>
             </div>
 
-            {/* Your core personality */}
             <h4 className="text-lg font-bold text-center mb-4">Your core personality</h4>
 
             <div className="space-y-4 mb-4">
@@ -1220,7 +1128,6 @@ export default function Step17Page() {
           transition={{ delay: 1.8 }}
           className="w-full max-w-sm pb-24"
         >
-          {/* Logo */}
           <div className="flex flex-col items-center mb-6">
             <img
               src="/logo.png"
@@ -1230,7 +1137,6 @@ export default function Step17Page() {
             <p className="text-sm font-medium">PalmCosmic</p>
           </div>
 
-          {/* Contact Us */}
           <Link href="/Terms/contact-us.html" target="_blank" className="block w-full">
             <Button
               variant="outline"
@@ -1240,7 +1146,6 @@ export default function Step17Page() {
             </Button>
           </Link>
 
-          {/* Legal Links */}
           <div className="grid grid-cols-2 gap-4 text-center">
             <Link href="/Terms/privacy-policy.html" target="_blank" className="text-sm text-primary hover:underline">
               Privacy Policy
@@ -1258,7 +1163,7 @@ export default function Step17Page() {
         </motion.div>
       </div>
 
-      {/* Sticky CTA Button - only visible in testimonial and birth chart sections */}
+      {/* Sticky CTA Button */}
       {showStickyCTA && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}

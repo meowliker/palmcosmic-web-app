@@ -11,8 +11,12 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 function getPlanCoins(plan?: string | null) {
   // 1-week and 2-week trials give 15 coins each
   if (plan === "weekly" || plan === "monthly" || plan === "1week" || plan === "2week") return 15;
+  // A/B Test Variant B - 1-week trial gives 15 coins
+  if (plan === "1week-v2") return 15;
   // 4-week trial (monthly) and yearly plans give 30 coins
   if (plan === "yearly" || plan === "4week" || plan === "Yearly2") return 30;
+  // A/B Test Variant B - 4-week and 12-week trials give 30 coins
+  if (plan === "4week-v2" || plan === "12week-v2") return 30;
   return 0;
 }
 
@@ -188,10 +192,10 @@ export async function POST(request: NextRequest) {
         } else if (type === "trial_payment") {
           // Trial fee payment completed - now create the subscription with trial period
           const customerId = typeof session.customer === "string" ? session.customer : null;
-          const { subscriptionPriceId, trialDays } = session.metadata || {};
+          const { subscriptionPriceId, trialDays, abVariant } = session.metadata || {};
           
           console.log("Trial payment completed - creating subscription");
-          console.log("Customer ID:", customerId, "Price ID:", subscriptionPriceId, "Trial days:", trialDays);
+          console.log("Customer ID:", customerId, "Price ID:", subscriptionPriceId, "Trial days:", trialDays, "A/B Variant:", abVariant);
           
           if (customerId && subscriptionPriceId) {
             try {
@@ -205,6 +209,7 @@ export async function POST(request: NextRequest) {
                 metadata: {
                   userId: resolvedUserId || "",
                   plan: plan || "",
+                  abVariant: abVariant || "A",
                 },
               });
               
@@ -219,6 +224,8 @@ export async function POST(request: NextRequest) {
                   stripeSubscriptionId: subscription.id,
                   stripeCustomerId: customerId,
                   trialEndsAt: new Date(trialEnd * 1000).toISOString(),
+                  abTestVariant: abVariant || "A", // Track A/B test variant
+                  abTestId: "pricing-test-1",
                   updatedAt: now,
                 },
                 { merge: true }
@@ -232,6 +239,47 @@ export async function POST(request: NextRequest) {
                   },
                   { merge: true }
                 );
+              }
+              
+              // Track A/B test conversion
+              if (abVariant) {
+                try {
+                  const trialAmount = plan === "1week-v2" ? 2.99 : plan === "4week-v2" ? 7.99 : plan === "12week-v2" ? 14.99 : plan === "1week" ? 1 : 5.49;
+                  await adminDb.collection("abTestEvents").add({
+                    testId: "pricing-test-1",
+                    variant: abVariant,
+                    eventType: "conversion",
+                    visitorId: resolvedUserId,
+                    userId: resolvedUserId,
+                    metadata: { plan, amount: trialAmount },
+                    timestamp: now,
+                    createdAt: now,
+                  });
+                  
+                  // Update aggregated stats
+                  const statsRef = adminDb.collection("abTestStats").doc(`pricing-test-1_${abVariant}`);
+                  const statsDoc = await statsRef.get();
+                  if (statsDoc.exists) {
+                    await statsRef.set({
+                      conversions: FieldValue.increment(1),
+                      totalRevenue: FieldValue.increment(trialAmount),
+                      updatedAt: now,
+                    }, { merge: true });
+                  } else {
+                    await statsRef.set({
+                      testId: "pricing-test-1",
+                      variant: abVariant,
+                      impressions: 0,
+                      conversions: 1,
+                      bounces: 0,
+                      totalRevenue: trialAmount,
+                      createdAt: now,
+                      updatedAt: now,
+                    });
+                  }
+                } catch (abErr) {
+                  console.error("Failed to track A/B test conversion:", abErr);
+                }
               }
               
               // Update lead document
@@ -248,6 +296,7 @@ export async function POST(request: NextRequest) {
                     await leadsQuery.docs[0].ref.update({
                       subscriptionStatus: plan || "trialing",
                       subscribedAt: now,
+                      abTestVariant: abVariant || "A",
                     });
                   }
                 } catch (leadErr) {
