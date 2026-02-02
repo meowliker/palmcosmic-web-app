@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { getAdminAuth } from "@/lib/firebase-admin";
 import nodemailer from "nodemailer";
 
-// Generate 6-digit OTP
-function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Create email transporter
 function createTransporter() {
   return nodemailer.createTransport({
     service: "gmail",
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD, // App password for Gmail
+      pass: process.env.EMAIL_PASSWORD,
     },
   });
 }
@@ -31,70 +25,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adminDb = getAdminDb();
     const adminAuth = getAdminAuth();
 
-    // Check if user exists in Firestore (preferred)
-    const querySnapshot = await adminDb
-      .collection("users")
-      .where("email", "==", normalizedEmail)
-      .limit(1)
-      .get();
-
-    let userId: string | null = querySnapshot.empty ? null : querySnapshot.docs[0]!.id;
-
-    // Fallback: user exists in Firebase Auth but Firestore doc missing (common prod issue)
-    if (!userId) {
-      try {
-        const authUser = await adminAuth.getUserByEmail(normalizedEmail);
-        userId = authUser.uid;
-
-        const existing = await adminDb.collection("users").doc(userId).get();
-        if (!existing.exists) {
-          await adminDb.collection("users").doc(userId).set(
-            {
-              email: normalizedEmail,
-              subscriptionPlan: null,
-              subscriptionStatus: "none",
-              coins: 0,
-              createdAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-        }
-      } catch {
-        // ignore; will return USER_NOT_FOUND below
+    // Check if user exists
+    try {
+      await adminAuth.getUserByEmail(normalizedEmail);
+    } catch (err: any) {
+      if (err.code === "auth/user-not-found") {
+        return NextResponse.json(
+          { success: false, error: "USER_NOT_FOUND", message: "No account found with this email" },
+          { status: 404 }
+        );
       }
+      throw err;
     }
 
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "USER_NOT_FOUND", message: "No account found with this email" },
-        { status: 404 }
-      );
-    }
-
-    // Generate OTP
-    const otp = generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-    // Store OTP in Firebase
-    await adminDb.collection("otp_codes").doc(normalizedEmail).set({
-      otp,
-      email: normalizedEmail,
-      expiresAt: expiresAt.toISOString(),
-      createdAt: new Date().toISOString(),
-      verified: false,
+    // Generate password reset link
+    const resetLink = await adminAuth.generatePasswordResetLink(normalizedEmail, {
+      url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`,
     });
 
-    // Send email with OTP
+    // Send custom email with beautiful design
     if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
       const transporter = createTransporter();
       
       await transporter.sendMail({
         from: `"PalmCosmic" <${process.env.EMAIL_USER}>`,
         to: normalizedEmail,
-        subject: "Your PalmCosmic Verification Code",
+        subject: "Reset Your PalmCosmic Password",
         html: `
           <!DOCTYPE html>
           <html>
@@ -131,22 +89,24 @@ export async function POST(request: NextRequest) {
                         <table width="100%" border="0" cellpadding="0" cellspacing="0">
                           <tr>
                             <td align="center">
-                              <h2 style="color: #c4b5fd; font-size: 18px; margin: 0 0 8px 0; font-weight: 500;">Your Verification Code</h2>
+                              <h2 style="color: #c4b5fd; font-size: 18px; margin: 0 0 8px 0; font-weight: 500;">Reset Your Password</h2>
                             </td>
                           </tr>
                           <tr>
                             <td align="center" style="padding-bottom: 24px;">
                               <p style="color: #9CA3AF; font-size: 14px; margin: 0;">
-                                Enter this code to sign in to your PalmCosmic account
+                                We received a request to reset your password.<br>Click the button below to create a new password.
                               </p>
                             </td>
                           </tr>
                           <tr>
                             <td align="center" style="padding: 16px 0 24px 0;">
-                              <table border="0" cellpadding="0" cellspacing="0" bgcolor="#251d35" style="background-color: #251d35; border: 2px solid #A855F7; border-radius: 12px;">
+                              <table border="0" cellpadding="0" cellspacing="0">
                                 <tr>
-                                  <td align="center" style="padding: 20px 32px;">
-                                    <span style="font-size: 32px; font-weight: bold; color: #A855F7; letter-spacing: 6px; font-family: 'Courier New', monospace;">${otp}</span>
+                                  <td align="center" bgcolor="#A855F7" style="background-color: #A855F7; border-radius: 12px;">
+                                    <a href="${resetLink}" style="display: inline-block; color: #ffffff; text-decoration: none; padding: 16px 40px; font-weight: 600; font-size: 16px;">
+                                      Reset Password
+                                    </a>
                                   </td>
                                 </tr>
                               </table>
@@ -155,7 +115,17 @@ export async function POST(request: NextRequest) {
                           <tr>
                             <td align="center">
                               <p style="color: #6B7280; font-size: 12px; margin: 0; line-height: 1.5;">
-                                This code expires in 10 minutes.<br>If you didn't request this code, please ignore this email.
+                                This link expires in 1 hour.<br>If you didn't request this, please ignore this email.
+                              </p>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td align="center" style="padding-top: 24px; border-top: 1px solid #2d2640; margin-top: 24px;">
+                              <p style="color: #6B7280; font-size: 11px; margin: 16px 0 0 0;">
+                                If the button doesn't work, copy and paste this link:
+                              </p>
+                              <p style="color: #A855F7; font-size: 10px; margin: 8px 0 0 0; word-break: break-all;">
+                                ${resetLink}
                               </p>
                             </td>
                           </tr>
@@ -182,23 +152,21 @@ export async function POST(request: NextRequest) {
     } else {
       if (process.env.NODE_ENV === "production") {
         return NextResponse.json(
-          { success: false, error: "EMAIL_NOT_CONFIGURED", message: "Email sending is not configured" },
+          { success: false, error: "EMAIL_NOT_CONFIGURED" },
           { status: 500 }
         );
       }
-
-      console.log(`OTP for ${normalizedEmail}: ${otp}`);
+      console.log(`Password reset link for ${normalizedEmail}: ${resetLink}`);
     }
 
     return NextResponse.json({
       success: true,
-      message: "OTP sent successfully",
-      userId,
+      message: "Password reset email sent successfully",
     });
   } catch (error: any) {
-    console.error("Send OTP error:", error);
+    console.error("Send password reset error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to send OTP" },
+      { success: false, error: error.message || "Failed to send password reset email" },
       { status: 500 }
     );
   }
