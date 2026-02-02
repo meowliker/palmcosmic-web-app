@@ -274,7 +274,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Subscription distribution - placeholder, will be recalculated after Stripe enrichment
-    let subscriptionDistribution = {
+    let subscriptionDistribution: Record<string, number> = {
       weekly: 0,
       monthly: 0,
       yearly: 0,
@@ -384,6 +384,8 @@ export async function GET(request: NextRequest) {
       if (u.subscriptionPlan === "weekly") return sum + (4.99 * WEEKLY_TO_MONTHLY);
       if (u.subscriptionPlan === "monthly") return sum + 9.99;
       if (u.subscriptionPlan === "yearly") return sum + (49.99 / 12);
+      // Yearly2 plan ($49.99/year)
+      if (u.subscriptionPlan === "Yearly2") return sum + (49.99 / 12);
       // New trial plans (after trial, they pay recurring)
       if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
       if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
@@ -394,6 +396,7 @@ export async function GET(request: NextRequest) {
     projectedMrr = enrichedTrialingSubscribers.reduce((sum, u) => {
       if (u.subscriptionPlan === "1week" || u.subscriptionPlan === "2week") return sum + (19.99 * BIWEEKLY_TO_MONTHLY);
       if (u.subscriptionPlan === "4week") return sum + (29.99 * FOURWEEKLY_TO_MONTHLY);
+      // Yearly2 has no trial, so it won't be in trialing list
       return sum;
     }, mrr);
     
@@ -468,6 +471,7 @@ export async function GET(request: NextRequest) {
       "1week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "1week").length,
       "2week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "2week").length,
       "4week": allActiveAndTrialing.filter(u => u.subscriptionPlan === "4week").length,
+      "Yearly2": allActiveAndTrialing.filter(u => u.subscriptionPlan === "Yearly2").length,
     };
     
     const activeSubscribersList = enrichedActivePayingSubscribers.map(u => ({

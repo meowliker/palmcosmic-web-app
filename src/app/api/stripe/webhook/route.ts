@@ -11,8 +11,8 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 function getPlanCoins(plan?: string | null) {
   // 1-week and 2-week trials give 15 coins each
   if (plan === "weekly" || plan === "monthly" || plan === "1week" || plan === "2week") return 15;
-  // 4-week trial (monthly) gives 30 coins
-  if (plan === "yearly" || plan === "4week") return 30;
+  // 4-week trial (monthly) and yearly plans give 30 coins
+  if (plan === "yearly" || plan === "4week" || plan === "Yearly2") return 30;
   return 0;
 }
 

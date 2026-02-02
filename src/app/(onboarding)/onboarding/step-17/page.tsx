@@ -108,39 +108,40 @@ const pricingPlans = [
     id: "1week",
     name: "1-Week Trial",
     trialPrice: "$1",
+    perDayPrice: "$0.14",
     originalPrice: "$4.99",
     trialDays: 7,
     afterTrialPrice: "$19.99",
     afterTrialPeriod: "2-Week Plan",
-    description: "then 2-Week Plan $19.99",
   },
   {
     id: "2week",
     name: "2-Week Trial",
     trialPrice: "$5.49",
+    perDayPrice: "$0.39",
     originalPrice: "$10.99",
     trialDays: 14,
     afterTrialPrice: "$19.99",
     afterTrialPeriod: "2-Week Plan",
-    description: "then 2-Week Plan $19.99",
     popular: true,
   },
   {
-    id: "4week",
-    name: "4-Week Trial",
-    trialPrice: "$9.99",
-    originalPrice: "$19.99",
-    trialDays: 28,
-    afterTrialPrice: "$29.99",
-    afterTrialPeriod: "1-Month Plan",
-    description: "then 1-Month Plan $29.99",
+    id: "yearly",
+    name: "Yearly Plan",
+    trialPrice: "$49.99",
+    perDayPrice: "$0.13",
+    originalPrice: "$519.74",
+    trialDays: 0,
+    afterTrialPrice: "$49.99",
+    afterTrialPeriod: "Yearly",
+    bestValue: true,
   },
 ];
 
 export default function Step17Page() {
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<string>("2week");
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [paymentError, setPaymentError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [palmImage, setPalmImage] = useState<string | null>(null);
@@ -506,6 +507,11 @@ export default function Step17Page() {
                   Most popular
                 </span>
               )}
+              {(plan as any).bestValue && (
+                <span className="absolute -top-3 left-4 bg-green-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                  Best value
+                </span>
+              )}
 
               <div className="flex items-center justify-between">
                 <div className="text-left">
@@ -516,14 +522,14 @@ export default function Step17Page() {
                     <span className="text-muted-foreground line-through">{plan.originalPrice}</span>
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {plan.description}
+                    {(plan as any).yearlyEquivalent}
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-2xl font-bold">{plan.trialPrice}</span>
+                  <span className="text-2xl font-bold">{(plan as any).perDayPrice}</span>
                   <p className="text-xs text-muted-foreground">
-                    {plan.trialDays === 7 ? "1-WEEK" : plan.trialDays === 14 ? "2-WEEK" : "4-WEEK"} trial
+                    per day
                   </p>
                 </div>
               </div>
@@ -551,7 +557,7 @@ export default function Step17Page() {
             className="w-full h-14 text-lg font-semibold"
             size="lg"
           >
-            {isProcessing ? "Processing..." : "Start Trial and Continue"}
+            {isProcessing ? "Processing..." : selectedPlan === "yearly" ? "Subscribe Now" : "Start Trial and Continue"}
           </Button>
         </motion.div>
 
@@ -578,8 +584,10 @@ export default function Step17Page() {
               <a href="/Terms/terms-of-service.html" target="_blank" className="text-primary underline">Terms of Service</a>,{" "}
               <a href="/Terms/billing-terms.html" target="_blank" className="text-primary underline">Billing Terms</a> and{" "}
               <a href="/Terms/money-back-policy.html" target="_blank" className="text-primary underline">Money-back Policy</a>.
-              {" "}Start your {selectedPlan === "1week" ? "7-day" : selectedPlan === "2week" ? "14-day" : "28-day"} trial for {selectedPlan === "1week" ? "$1" : selectedPlan === "2week" ? "$5.49" : "$9.99"}. After the trial, you&apos;ll be charged {selectedPlan === "4week" ? "$29.99 monthly" : "$19.99 every 2 weeks"} until canceled.
-              By completing your purchase, you consent to us securely storing your payment details for future charges. No refunds for partial periods. You can cancel subscription anytime via account settings or by contacting support at weatpalmcosmic@gmail.com.
+              {selectedPlan === "yearly" 
+                ? " Subscribe for $49.99/year. You'll be charged $49.99 yearly until canceled."
+                : ` Start your ${selectedPlan === "1week" ? "7-day" : "14-day"} trial for ${selectedPlan === "1week" ? "$1" : "$5.49"}. After the trial, you'll be charged $19.99 every 2 weeks until canceled.`}
+              {" "}By completing your purchase, you consent to us securely storing your payment details for future charges. No refunds for partial periods. You can cancel subscription anytime via account settings or by contacting support at weatpalmcosmic@gmail.com.
             </span>
           </label>
         </motion.div>

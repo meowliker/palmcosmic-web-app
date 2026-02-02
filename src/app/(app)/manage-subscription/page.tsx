@@ -9,7 +9,7 @@ import { useUserStore } from "@/lib/user-store";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-// Only 2 plans available for manage subscription
+// Plans available for manage subscription
 const subscriptionPlans = [
   {
     id: "2week-plan",
@@ -23,6 +23,12 @@ const subscriptionPlans = [
     name: "Monthly Plan",
     price: "$29.99",
     period: "/month",
+  },
+  {
+    id: "yearly-plan",
+    name: "Yearly Plan",
+    price: "$49.99",
+    period: "/year",
     bestValue: true,
   },
 ];
@@ -34,7 +40,8 @@ const trialToRecurringPlan: Record<string, string> = {
   "4week": "monthly-plan",
   "weekly": "2week-plan",
   "monthly": "monthly-plan",
-  "yearly": "monthly-plan",
+  "yearly": "yearly-plan",
+  "Yearly2": "yearly-plan", // New yearly plan
 };
 
 export default function ManageSubscriptionPage() {
@@ -67,26 +74,32 @@ export default function ManageSubscriptionPage() {
   // Normalize raw plan to display plan (maps trial plans to recurring)
   const normalizeToDisplayPlan = (plan: any): string | null => {
     if (!plan) return null;
-    const p = String(plan).toLowerCase().trim();
-    // Map trial plans to their recurring equivalents
+    const p = String(plan).trim();
+    const pLower = p.toLowerCase();
+    // Map trial plans to their recurring equivalents (case-sensitive for Yearly2)
     if (trialToRecurringPlan[p]) return trialToRecurringPlan[p];
+    if (trialToRecurringPlan[pLower]) return trialToRecurringPlan[pLower];
     // Direct plan matches
-    if (p === "2week-plan") return "2week-plan";
-    if (p === "monthly-plan") return "monthly-plan";
+    if (pLower === "2week-plan") return "2week-plan";
+    if (pLower === "monthly-plan") return "monthly-plan";
+    if (pLower === "yearly-plan") return "yearly-plan";
     return null;
   };
 
-  const normalizePlan = (plan: any): "1week" | "2week" | "4week" | "weekly" | "monthly" | "yearly" | null => {
+  const normalizePlan = (plan: any): "1week" | "2week" | "4week" | "weekly" | "monthly" | "yearly" | "Yearly2" | null => {
     if (!plan) return null;
-    const p = String(plan).toLowerCase().trim();
+    const p = String(plan).trim();
+    const pLower = p.toLowerCase();
     // New trial plans
-    if (p === "1week") return "1week";
-    if (p === "2week") return "2week";
-    if (p === "4week") return "4week";
+    if (pLower === "1week") return "1week";
+    if (pLower === "2week") return "2week";
+    if (pLower === "4week") return "4week";
+    // Yearly2 plan (case-sensitive)
+    if (p === "Yearly2") return "Yearly2";
     // Legacy plans
-    if (p === "weekly" || p.includes("week")) return "weekly";
-    if (p === "monthly" || p.includes("month")) return "monthly";
-    if (p === "yearly" || p.includes("year") || p.includes("annual")) return "yearly";
+    if (pLower === "weekly" || pLower.includes("week")) return "weekly";
+    if (pLower === "monthly" || pLower.includes("month")) return "monthly";
+    if (pLower === "yearly" || pLower.includes("year") || pLower.includes("annual")) return "yearly";
     return null;
   };
 
@@ -189,6 +202,7 @@ export default function ManageSubscriptionPage() {
   const getAfterTrialCharge = () => {
     const rawPlan = subscriptionStatus.rawPlan;
     if (rawPlan === "4week") return "$29.99/month";
+    if (rawPlan === "Yearly2" || rawPlan === "yearly") return "$49.99/year";
     return "$19.99/2 weeks";
   };
 
@@ -381,7 +395,7 @@ export default function ManageSubscriptionPage() {
                   <div>
                     <p className="text-white/60 text-sm">Current Plan</p>
                     <p className="text-primary text-lg font-bold">
-                      {activePlan === "2week-plan" ? "2-Week Plan" : "Monthly Plan"}
+                      {activePlan === "2week-plan" ? "2-Week Plan" : activePlan === "yearly-plan" ? "Yearly Plan" : "Monthly Plan"}
                     </p>
                   </div>
                 </div>
