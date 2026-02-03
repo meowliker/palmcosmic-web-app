@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, ascendantSign: storeAscendantSign } = useOnboardingStore();
   
   // Get unlocked features from user store
-  const { unlockedFeatures, birthChartGenerating, birthChartReady } = useUserStore();
+  const { unlockedFeatures, birthChartGenerating, birthChartReady, syncFromFirebase } = useUserStore();
 
   useEffect(() => {
     loadUserZodiac();
@@ -67,6 +67,17 @@ export default function DashboardPage() {
           if (data.name) setUserName(data.name);
           if (data.email) setUserEmail(data.email);
           cacheUserInfo(data.name, data.email);
+          
+          // Sync unlocked features from Firebase to user store
+          syncFromFirebase({
+            unlockedFeatures: data.unlockedFeatures,
+            palmReading: data.palmReading,
+            birthChart: data.birthChart,
+            compatibilityTest: data.compatibilityTest,
+            prediction2026: data.prediction2026,
+            coins: data.coins,
+            subscriptionPlan: data.subscriptionPlan,
+          });
           
           // Load birth chart timer data
           if (data.birthChartTimerActive !== undefined) {

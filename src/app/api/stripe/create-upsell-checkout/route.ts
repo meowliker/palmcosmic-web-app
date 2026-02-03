@@ -25,7 +25,10 @@ const UPSELL_PRICES: Record<string, { priceId: string; amount: number }> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { selectedOffers, userId, email, successPath, cancelPath } = await request.json();
+    const { selectedOffers, offers, userId, email, successPath, cancelPath, flow } = await request.json();
+    
+    // Support both 'selectedOffers' and 'offers' parameter names
+    const offersList = selectedOffers || offers || [];
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
@@ -34,7 +37,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!selectedOffers || selectedOffers.length === 0) {
+    if (!offersList || offersList.length === 0) {
       return NextResponse.json(
         { error: "No offers selected" },
         { status: 400 }
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
     let totalAmount = 0;
 
-    for (const offerId of selectedOffers) {
+    for (const offerId of offersList) {
       const offer = UPSELL_PRICES[offerId];
       if (!offer) continue;
 
@@ -88,8 +91,14 @@ export async function POST(request: NextRequest) {
     // Get the base URL - use request origin as fallback
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "https://palmcosmic-web-app.vercel.app";
 
-    let successUrl = `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${selectedOffers.join(",")}&session_id={CHECKOUT_SESSION_ID}`;
-    let cancelUrl = `${baseUrl}/onboarding/step-18?cancelled=true`;
+    // Determine success/cancel URLs based on flow
+    const isFlowB = flow === "flow-b";
+    let successUrl = isFlowB
+      ? `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${offersList.join(",")}&session_id={CHECKOUT_SESSION_ID}`
+      : `${baseUrl}/onboarding/step-19?upsell_success=true&offers=${offersList.join(",")}&session_id={CHECKOUT_SESSION_ID}`;
+    let cancelUrl = isFlowB
+      ? `${baseUrl}/onboarding/bundle-upsell?cancelled=true`
+      : `${baseUrl}/onboarding/step-18?cancelled=true`;
 
     if (typeof successPath === "string" && successPath.startsWith("/")) {
       successUrl = `${baseUrl}${successPath}`;
@@ -114,7 +123,8 @@ export async function POST(request: NextRequest) {
       metadata: {
         userId: userId || "",
         type: "upsell",
-        offers: selectedOffers.join(","),
+        offers: offersList.join(","),
+        flow: flow || "flow-a",
       },
     };
 

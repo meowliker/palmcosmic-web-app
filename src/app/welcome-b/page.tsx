@@ -5,14 +5,14 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-export default function WelcomePage() {
+export default function WelcomeBPage() {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Route protection: Check user status and redirect accordingly
   useEffect(() => {
-    // Mark user as Flow A (subscription flow)
-    localStorage.setItem("palmcosmic_onboarding_flow", "flow-a");
+    // Mark user as Flow B (bundle flow)
+    localStorage.setItem("palmcosmic_onboarding_flow", "flow-b");
     
     const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
     const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
@@ -22,8 +22,8 @@ export default function WelcomePage() {
       router.replace("/home");
       return;
     } else if (hasCompletedPayment) {
-      // User has paid but not registered - redirect to upsell page
-      router.replace("/onboarding/step-18");
+      // User has paid but not registered - redirect to bundle upsell page
+      router.replace("/onboarding/bundle-upsell");
       return;
     }
     // New user - allow access to welcome page

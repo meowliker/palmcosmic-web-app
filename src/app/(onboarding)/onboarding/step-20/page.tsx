@@ -14,21 +14,53 @@ const progressSteps = [
   { label: "Access to the app", active: true },
 ];
 
-const features = [
+// Flow A (subscription) features
+const subscriptionFeatures = [
   { icon: "🔮", title: "Daily Horoscope", description: "Personalized predictions based on your ascendant sign" },
   { icon: "🖐️", title: "Palm Reading", description: "AI-powered palm analysis for life insights" },
   { icon: "📊", title: "Birth Chart", description: "Complete astrological birth chart analysis" },
   { icon: "💫", title: "2026 Predictions", description: "Your yearly and monthly cosmic forecast" },
 ];
 
+// Flow B bundle features based on what was purchased
+const getBundleFeatures = (bundleId: string | null) => {
+  const features = [];
+  
+  // Always included for all Flow B users
+  features.push({ icon: "🔮", title: "Daily Horoscope", description: "Personalized predictions based on your ascendant sign" });
+  features.push({ icon: "🖐️", title: "Palm Reading", description: "AI-powered palm analysis for life insights" });
+  
+  // Palm + Birth Chart and Full Bundle include birth chart
+  if (bundleId === "bundle-palm-birth" || bundleId === "bundle-full") {
+    features.push({ icon: "📊", title: "Birth Chart", description: "Complete astrological birth chart analysis" });
+  }
+  
+  // Full Bundle includes compatibility
+  if (bundleId === "bundle-full") {
+    features.push({ icon: "💕", title: "Compatibility Report", description: "Find your perfect cosmic match" });
+  }
+  
+  // All bundles include AI chat coins
+  features.push({ icon: "💬", title: "15 AI Chat Coins", description: "Ask Elysia anything about your destiny" });
+  
+  return features;
+};
+
 export default function Step20Page() {
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isFlowB, setIsFlowB] = useState(false);
+  const [bundleId, setBundleId] = useState<string | null>(null);
 
   // Route protection: Check if user has completed registration
   useEffect(() => {
     const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
     const hasCompletedRegistration = localStorage.getItem("palmcosmic_registration_completed") === "true";
+    const flow = localStorage.getItem("palmcosmic_onboarding_flow");
+    const bundle = localStorage.getItem("palmcosmic_bundle_id");
+    
+    setIsFlowB(flow === "flow-b");
+    setBundleId(bundle);
     
     // Must have completed both payment and registration to access this page
     if (hasCompletedPayment && hasCompletedRegistration) {
@@ -39,10 +71,18 @@ export default function Step20Page() {
       return;
     } else {
       // No payment - redirect to payment page
-      router.replace("/onboarding/step-17");
+      const onboardingFlow = localStorage.getItem("palmcosmic_onboarding_flow");
+      if (onboardingFlow === "flow-b") {
+        router.replace("/onboarding/bundle-pricing");
+      } else {
+        router.replace("/onboarding/step-17");
+      }
       return;
     }
   }, [router]);
+
+  // Get features based on flow
+  const displayFeatures = isFlowB ? getBundleFeatures(bundleId) : subscriptionFeatures;
 
   const handleAccessApp = async () => {
     // Set access cookie via API
@@ -140,7 +180,7 @@ export default function Step20Page() {
 
         {/* Features */}
         <div className="w-full max-w-sm space-y-3 mb-6">
-          {features.map((feature, index) => (
+          {displayFeatures.map((feature, index) => (
             <motion.div
               key={feature.title}
               initial={{ opacity: 0, x: -20 }}

@@ -74,7 +74,7 @@ export default function LoginPage() {
         console.error("Failed to set session:", err);
       }
 
-      // Hydrate store from Firestore
+      // Hydrate store from Firestore and detect flow
       try {
         const snap = await getDoc(doc(db, "users", user.uid));
         if (snap.exists()) {
@@ -86,6 +86,15 @@ export default function LoginPage() {
             setCoins(data.coins);
           }
           setFirebaseUserId(user.uid);
+          
+          // Detect and store user's flow type
+          const userFlow = data.onboardingFlow || (data.purchaseType === "one-time" ? "flow-b" : "flow-a");
+          localStorage.setItem("palmcosmic_onboarding_flow", userFlow);
+          
+          // Store purchase type for dashboard restrictions
+          if (data.purchaseType) {
+            localStorage.setItem("palmcosmic_purchase_type", data.purchaseType);
+          }
         }
       } catch (err) {
         console.error("Failed to hydrate user after login:", err);
@@ -223,6 +232,15 @@ export default function LoginPage() {
         setCoins(data.user.coins);
       }
       setFirebaseUserId(data.user.id);
+      
+      // Detect and store user's flow type from OTP login
+      const userFlow = data.user.onboardingFlow || (data.user.purchaseType === "one-time" ? "flow-b" : "flow-a");
+      localStorage.setItem("palmcosmic_onboarding_flow", userFlow);
+      
+      // Store purchase type for dashboard restrictions
+      if (data.user.purchaseType) {
+        localStorage.setItem("palmcosmic_purchase_type", data.user.purchaseType);
+      }
 
       // Set session
       try {

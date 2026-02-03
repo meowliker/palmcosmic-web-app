@@ -184,6 +184,13 @@ export default function AStep17Page() {
       return;
     }
     
+    // Flow B users should go to bundle-pricing, not subscription pricing
+    const onboardingFlow = localStorage.getItem("palmcosmic_onboarding_flow");
+    if (onboardingFlow === "flow-b") {
+      router.replace("/onboarding/bundle-pricing");
+      return;
+    }
+    
     // Track A/B test impression (only once per session to avoid duplicate counts)
     const impressionKey = "palmcosmic_ab_impression_B";
     if (!sessionStorage.getItem(impressionKey)) {

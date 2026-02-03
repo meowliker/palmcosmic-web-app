@@ -68,12 +68,12 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const { userId, plan, type, offers, coins, feature } = session.metadata || {};
+        const { userId, plan, type, offers, coins, feature, bundleId, flow } = session.metadata || {};
         let resolvedUserId = (userId || "").trim();
         const now = new Date().toISOString();
         const customerEmail = (session.customer_details?.email || session.customer_email || "").toLowerCase().trim();
 
-        console.log("Checkout completed - userId:", resolvedUserId, "email:", customerEmail, "plan:", plan);
+        console.log("Checkout completed - userId:", resolvedUserId, "email:", customerEmail, "plan:", plan, "type:", type, "bundleId:", bundleId, "flow:", flow);
 
         // If userId is missing, try to find user by email
         if (!resolvedUserId && customerEmail) {
@@ -113,6 +113,9 @@ export async function POST(request: NextRequest) {
             currency: session.currency || null,
             paymentStatus: session.payment_status || null,
             createdAt: now,
+            // Flow B fields
+            bundleId: bundleId || null,
+            flow: flow || (type === "bundle_payment" ? "flow-b" : "flow-a"),
           };
 
           if (resolvedUserId) {
@@ -145,7 +148,68 @@ export async function POST(request: NextRequest) {
           { merge: true }
         );
 
-        if (type === "upsell") {
+        if (type === "bundle_payment") {
+          // Flow B: One-time bundle payment
+          const { bundleId, flow, features: featuresJson } = session.metadata || {};
+          const features = featuresJson ? JSON.parse(featuresJson) : [];
+          
+          console.log("Bundle payment completed - bundleId:", bundleId, "features:", features);
+          
+          // Build unlocked features object
+          const unlockedFeatures: Record<string, boolean> = {};
+          for (const feature of features) {
+            unlockedFeatures[feature] = true;
+          }
+          
+          // All bundles give 15 coins
+          const coinsToAdd = 15;
+          
+          const updateData: any = {
+            onboardingFlow: flow || "flow-b",
+            purchaseType: "one-time",
+            bundlePurchased: bundleId,
+            unlockedFeatures,
+            palmReading: features.includes("palmReading"),
+            birthChart: features.includes("birthChart"),
+            compatibilityTest: features.includes("compatibilityTest"),
+            scansUsed: 0,
+            scansAllowed: 1, // Bundle users get 1 scan only
+            coins: FieldValue.increment(coinsToAdd),
+            updatedAt: now,
+          };
+          
+          // Start 24-hour timer if birth chart is included
+          if (features.includes("birthChart")) {
+            updateData.birthChartTimerActive = true;
+            updateData.birthChartTimerStartedAt = now;
+          }
+          
+          await userRef.set(updateData, { merge: true });
+          
+          // Update lead document
+          if (customerEmail) {
+            try {
+              const leadsQuery = await adminDb
+                .collection("leads")
+                .where("email", "==", customerEmail)
+                .orderBy("createdAt", "desc")
+                .limit(1)
+                .get();
+              
+              if (!leadsQuery.empty) {
+                await leadsQuery.docs[0].ref.update({
+                  onboardingFlow: flow || "flow-b",
+                  bundlePurchased: bundleId,
+                  purchasedAt: now,
+                });
+              }
+            } catch (leadErr) {
+              console.error("Failed to update lead for bundle purchase:", leadErr);
+            }
+          }
+          
+          console.log("Bundle purchase processed successfully for user:", resolvedUserId);
+        } else if (type === "upsell") {
           const offerList = (offers || "").split(",").map((s) => s.trim()).filter(Boolean);
           const unlockUpdates = offersToUnlockedFeatures(offerList);
           
@@ -379,48 +443,54 @@ export async function POST(request: NextRequest) {
             console.log("No subscription ID found in session");
           }
         } else {
-          const coinsToAdd = getPlanCoins(plan || null);
-          await userRef.set(
-            {
-              subscriptionPlan: plan || null,
-              subscriptionStatus: "active",
-              subscriptionStartedAt: now,
-              subscriptionCancelled: false,
-              stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
-              stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
-              updatedAt: now,
-            },
-            { merge: true }
-          );
-          
-          // Update lead document with subscription status
-          if (customerEmail) {
-            try {
-              const leadsQuery = await adminDb
-                .collection("leads")
-                .where("email", "==", customerEmail)
-                .orderBy("createdAt", "desc")
-                .limit(1)
-                .get();
-              
-              if (!leadsQuery.empty) {
-                await leadsQuery.docs[0].ref.update({
-                  subscriptionStatus: plan || "subscribed",
-                  subscribedAt: now,
-                });
-              }
-            } catch (leadErr) {
-              console.error("Failed to update lead subscription status:", leadErr);
-            }
-          }
-          if (coinsToAdd > 0) {
+          // Only treat as subscription if session mode is "subscription"
+          // Skip if session mode is "payment" (one-time) to avoid overwriting bundle data
+          if (session.mode === "subscription") {
+            const coinsToAdd = getPlanCoins(plan || null);
             await userRef.set(
               {
-                coins: FieldValue.increment(coinsToAdd),
+                subscriptionPlan: plan || null,
+                subscriptionStatus: "active",
+                subscriptionStartedAt: now,
+                subscriptionCancelled: false,
+                stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
+                stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
                 updatedAt: now,
               },
               { merge: true }
             );
+            
+            // Update lead document with subscription status
+            if (customerEmail) {
+              try {
+                const leadsQuery = await adminDb
+                  .collection("leads")
+                  .where("email", "==", customerEmail)
+                  .orderBy("createdAt", "desc")
+                  .limit(1)
+                  .get();
+                
+                if (!leadsQuery.empty) {
+                  await leadsQuery.docs[0].ref.update({
+                    subscriptionStatus: plan || "subscribed",
+                    subscribedAt: now,
+                  });
+                }
+              } catch (leadErr) {
+                console.error("Failed to update lead subscription status:", leadErr);
+              }
+            }
+            if (coinsToAdd > 0) {
+              await userRef.set(
+                {
+                  coins: FieldValue.increment(coinsToAdd),
+                  updatedAt: now,
+                },
+                { merge: true }
+              );
+            }
+          } else {
+            console.log("Skipping subscription handling for non-subscription session mode:", session.mode, "type:", type);
           }
         }
         break;

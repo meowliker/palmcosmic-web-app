@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, FileText, Mail, LogOut, CreditCard, ChevronRight } from "lucide-react";
@@ -15,14 +15,53 @@ const subscriptionBenefits = [
   { icon: "🖐️", text: "Palm Readings" },
 ];
 
+// Bundle benefits based on what was purchased
+const getBundleBenefits = (bundleId: string | null, unlockedFeatures?: { birthChart?: boolean; compatibilityTest?: boolean; prediction2026?: boolean }) => {
+  const benefits = [];
+  
+  // Always included for all users
+  benefits.push({ icon: "🔮", text: "Daily Horoscope" });
+  benefits.push({ icon: "🖐️", text: "Palm Reading Report" });
+  
+  // Show based on what was purchased (check both bundleId and unlockedFeatures)
+  if (bundleId === "bundle-palm-birth" || bundleId === "bundle-full" || unlockedFeatures?.birthChart) {
+    benefits.push({ icon: "🌙", text: "Birth Chart Analysis" });
+  }
+  if (bundleId === "bundle-full" || unlockedFeatures?.compatibilityTest) {
+    benefits.push({ icon: "💕", text: "Compatibility Report" });
+  }
+  if (unlockedFeatures?.prediction2026) {
+    benefits.push({ icon: "💫", text: "2026 Predictions" });
+  }
+  
+  // All bundles include coins
+  benefits.push({ icon: "💬", text: "15 AI Chat Coins" });
+  
+  return benefits;
+};
+
 export default function SettingsPage() {
   const router = useRouter();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const { subscriptionPlan, resetUserState } = useUserStore();
+  const [isFlowB, setIsFlowB] = useState(false);
+  const [bundleId, setBundleId] = useState<string | null>(null);
+  const { subscriptionPlan, resetUserState, unlockedFeatures } = useUserStore();
 
   const userEmail = typeof window !== "undefined" 
     ? localStorage.getItem("palmcosmic_email") || "user@example.com"
     : "user@example.com";
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const flow = localStorage.getItem("palmcosmic_onboarding_flow");
+      const purchaseType = localStorage.getItem("palmcosmic_purchase_type");
+      const bundle = localStorage.getItem("palmcosmic_bundle_id");
+      setIsFlowB(flow === "flow-b" || purchaseType === "one-time");
+      setBundleId(bundle);
+    }
+  }, []);
+
+  const displayBenefits = isFlowB ? getBundleBenefits(bundleId, unlockedFeatures) : subscriptionBenefits;
 
   const handleLogout = () => {
     // Clear local storage
@@ -68,15 +107,17 @@ export default function SettingsPage() {
 
         <div className="flex-1 overflow-y-auto relative z-10">
           <div className="px-4 py-4 space-y-4">
-            {/* Subscription Benefits */}
+            {/* Benefits Section */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="bg-[#1A1F2E] rounded-2xl p-5 border border-white/10"
             >
-              <h2 className="text-primary text-xl font-bold mb-4">Your Subscription Benefits</h2>
+              <h2 className="text-primary text-xl font-bold mb-4">
+                {isFlowB ? "Your Purchase Benefits" : "Your Subscription Benefits"}
+              </h2>
               <div className="space-y-3">
-                {subscriptionBenefits.map((benefit, index) => (
+                {displayBenefits.map((benefit, index) => (
                   <div key={index} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">{benefit.icon}</span>
@@ -138,22 +179,24 @@ export default function SettingsPage() {
               </button>
             </motion.div>
 
-            {/* Manage Subscription Button */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <button
-                onClick={() => router.push("/manage-subscription")}
-                className="w-full bg-[#1A1F2E] rounded-2xl p-4 border border-primary/30 hover:bg-[#252A3A] transition-colors"
+            {/* Manage Subscription Button - Only show for subscription users (Flow A) */}
+            {!isFlowB && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
               >
-                <div className="flex items-center justify-center gap-2">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  <span className="text-white font-medium">Manage Subscription</span>
-                </div>
-              </button>
-            </motion.div>
+                <button
+                  onClick={() => router.push("/manage-subscription")}
+                  className="w-full bg-[#1A1F2E] rounded-2xl p-4 border border-primary/30 hover:bg-[#252A3A] transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <CreditCard className="w-5 h-5 text-primary" />
+                    <span className="text-white font-medium">Manage Subscription</span>
+                  </div>
+                </button>
+              </motion.div>
+            )}
           </div>
         </div>
 

@@ -95,6 +95,8 @@ export async function POST(request: NextRequest) {
 
     // Apply entitlements.
     const type = String(meta.type || "").trim();
+    
+    console.log("Fulfill checkout - type:", type, "meta:", JSON.stringify(meta));
 
     await userRef.set(
       {
@@ -104,7 +106,47 @@ export async function POST(request: NextRequest) {
       { merge: true }
     );
 
-    if (type === "upsell") {
+    if (type === "bundle_payment") {
+      // Flow B: One-time bundle payment
+      const bundleId = meta.bundleId || "";
+      const flow = meta.flow || "flow-b";
+      const featuresJson = meta.features || "[]";
+      const features = JSON.parse(featuresJson);
+      
+      console.log("Fulfilling bundle payment - bundleId:", bundleId, "features:", features);
+      
+      // Build unlocked features object
+      const unlockedFeatures: Record<string, boolean> = {};
+      for (const feature of features) {
+        unlockedFeatures[feature] = true;
+      }
+      
+      // All bundles give 15 coins
+      const coinsToAdd = 15;
+      
+      const updateData: any = {
+        onboardingFlow: flow,
+        purchaseType: "one-time",
+        bundlePurchased: bundleId,
+        unlockedFeatures,
+        palmReading: features.includes("palmReading"),
+        birthChart: features.includes("birthChart"),
+        compatibilityTest: features.includes("compatibilityTest"),
+        scansUsed: 0,
+        scansAllowed: 1, // Bundle users get 1 scan only
+        coins: FieldValue.increment(coinsToAdd),
+        updatedAt: now,
+      };
+      
+      // Start 24-hour timer if birth chart is included
+      if (features.includes("birthChart")) {
+        updateData.birthChartTimerActive = true;
+        updateData.birthChartTimerStartedAt = now;
+      }
+      
+      await userRef.set(updateData, { merge: true });
+      console.log("Bundle payment fulfilled for user:", resolvedUserId);
+    } else if (type === "upsell") {
       const offerList = String(meta.offers || "")
         .split(",")
         .map((s) => s.trim())
@@ -152,30 +194,35 @@ export async function POST(request: NextRequest) {
           { merge: true }
         );
       }
-    } else {
-      // Treat as subscription fulfillment.
-      const plan = String(meta.plan || "").trim() || null;
-      const coinsToAdd = getPlanCoins(plan);
-      await userRef.set(
-        {
-          subscriptionPlan: plan,
-          subscriptionStatus: "active",
-          subscriptionStartedAt: now,
-          subscriptionCancelled: false,
-          stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
-          stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
-          updatedAt: now,
-        },
-        { merge: true }
-      );
-      if (coinsToAdd > 0) {
+    } else if (type === "subscription" || type === "" || !type) {
+      // Only treat as subscription if explicitly marked or no type (legacy)
+      // Skip if session mode is "payment" (one-time) to avoid overwriting bundle data
+      if (session.mode === "subscription") {
+        const plan = String(meta.plan || "").trim() || null;
+        const coinsToAdd = getPlanCoins(plan);
         await userRef.set(
           {
-            coins: FieldValue.increment(coinsToAdd),
+            subscriptionPlan: plan,
+            subscriptionStatus: "active",
+            subscriptionStartedAt: now,
+            subscriptionCancelled: false,
+            stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
+            stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
             updatedAt: now,
           },
           { merge: true }
         );
+        if (coinsToAdd > 0) {
+          await userRef.set(
+            {
+              coins: FieldValue.increment(coinsToAdd),
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+        }
+      } else {
+        console.log("Skipping subscription fulfillment for non-subscription session mode:", session.mode, "type:", type);
       }
     }
 

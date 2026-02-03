@@ -43,6 +43,17 @@ interface UserState {
   
   // Reset for testing
   resetUserState: () => void;
+  
+  // Sync features from Firebase data
+  syncFromFirebase: (data: {
+    unlockedFeatures?: Partial<UnlockedFeatures>;
+    palmReading?: boolean;
+    birthChart?: boolean;
+    compatibilityTest?: boolean;
+    prediction2026?: boolean;
+    coins?: number;
+    subscriptionPlan?: SubscriptionPlan;
+  }) => void;
 }
 
 const initialUnlockedFeatures: UnlockedFeatures = {
@@ -147,6 +158,32 @@ export const useUserStore = create<UserState>()(
 
       // Reset for testing
       resetUserState: () => set(initialState),
+      
+      // Sync features from Firebase data
+      syncFromFirebase: (data) => {
+        const updates: Partial<UserState> = {};
+        
+        // Sync unlocked features - check both nested object and flat fields
+        const features: UnlockedFeatures = {
+          palmReading: data.unlockedFeatures?.palmReading ?? data.palmReading ?? false,
+          birthChart: data.unlockedFeatures?.birthChart ?? data.birthChart ?? false,
+          compatibilityTest: data.unlockedFeatures?.compatibilityTest ?? data.compatibilityTest ?? false,
+          prediction2026: data.unlockedFeatures?.prediction2026 ?? data.prediction2026 ?? false,
+        };
+        updates.unlockedFeatures = features;
+        
+        // Sync coins if provided
+        if (typeof data.coins === "number") {
+          updates.coins = data.coins;
+        }
+        
+        // Sync subscription plan if provided
+        if (data.subscriptionPlan) {
+          updates.subscriptionPlan = data.subscriptionPlan;
+        }
+        
+        set(updates);
+      },
     }),
     {
       name: "palmcosmic-user",

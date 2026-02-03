@@ -89,7 +89,14 @@ export default function Step16Page() {
   const handleGetPrediction = () => {
     // Track AddToWishlist when user clicks "Get My Prediction"
     pixelEvents.addToWishlist("Full Prediction Access");
-    router.push("/onboarding/step-17");
+    
+    // Check if user is in Flow B (bundle flow)
+    const flow = localStorage.getItem("palmcosmic_onboarding_flow");
+    if (flow === "flow-b") {
+      router.push("/onboarding/bundle-pricing");
+    } else {
+      router.push("/onboarding/step-17");
+    }
   };
 
   return (

@@ -151,6 +151,13 @@ export default function ManageSubscriptionPage() {
       const userDoc = await getDoc(doc(db, "users", userId));
       if (userDoc.exists()) {
         const data = userDoc.data();
+        
+        // Check if user is Flow B (bundle purchase) - redirect them away
+        if (data.onboardingFlow === "flow-b" || data.purchaseType === "one-time") {
+          router.replace("/dashboard");
+          return;
+        }
+        
         const rawPlan = (data as any).subscriptionPlan || null;
         const isTrialing = data.subscriptionStatus === "trialing";
         const trialEndsAt = data.trialEndsAt || null;

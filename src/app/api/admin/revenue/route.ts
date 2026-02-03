@@ -8,9 +8,10 @@ export async function GET(request: NextRequest) {
   try {
     const adminDb = getAdminDb();
     
-    // Get session token from query params for admin check
+    // Get session token and flow filter from query params
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");
+    const flowFilter = searchParams.get("flow") || "all"; // "all", "flow-a", "flow-b"
     
     if (!token) {
       return NextResponse.json({ error: "Unauthorized - No token provided" }, { status: 401 });
@@ -40,10 +41,35 @@ export async function GET(request: NextRequest) {
     
     // Fetch all payments
     const paymentsSnapshot = await adminDb.collection("payments").orderBy("createdAt", "desc").get();
-    const payments: any[] = [];
+    const allPayments: any[] = [];
     paymentsSnapshot.forEach(doc => {
-      payments.push({ id: doc.id, ...doc.data() });
+      allPayments.push({ id: doc.id, ...doc.data() });
     });
+    
+    // Filter payments by flow
+    const payments = flowFilter === "all" 
+      ? allPayments 
+      : allPayments.filter(p => {
+          const paymentFlow = p.flow || (p.type === "bundle_payment" ? "flow-b" : "flow-a");
+          return paymentFlow === flowFilter;
+        });
+    
+    // Calculate flow breakdown for summary
+    const flowAPayments = allPayments.filter(p => (p.flow || "flow-a") === "flow-a" && p.type !== "bundle_payment");
+    const flowBPayments = allPayments.filter(p => p.flow === "flow-b" || p.type === "bundle_payment");
+    
+    const flowBreakdown = {
+      flowA: {
+        payments: flowAPayments.length,
+        revenue: flowAPayments.reduce((sum, p) => sum + ((p.amountTotal || p.amount || 0) / 100), 0),
+        type: "subscription",
+      },
+      flowB: {
+        payments: flowBPayments.length,
+        revenue: flowBPayments.reduce((sum, p) => sum + ((p.amountTotal || p.amount || 0) / 100), 0),
+        type: "one-time",
+      },
+    };
     
     // Fetch subscriptions directly from Stripe for accurate data
     // Fetch ALL statuses separately to ensure we get everything
@@ -564,12 +590,28 @@ export async function GET(request: NextRequest) {
       };
     });
     
+    // Bundle revenue breakdown (Flow B only)
+    const bundleBreakdown = {
+      "bundle-palm": {
+        count: flowBPayments.filter(p => p.bundleId === "bundle-palm").length,
+        revenue: flowBPayments.filter(p => p.bundleId === "bundle-palm").reduce((sum, p) => sum + ((p.amountTotal || p.amount || 0) / 100), 0),
+      },
+      "bundle-palm-birth": {
+        count: flowBPayments.filter(p => p.bundleId === "bundle-palm-birth").length,
+        revenue: flowBPayments.filter(p => p.bundleId === "bundle-palm-birth").reduce((sum, p) => sum + ((p.amountTotal || p.amount || 0) / 100), 0),
+      },
+      "bundle-full": {
+        count: flowBPayments.filter(p => p.bundleId === "bundle-full").length,
+        revenue: flowBPayments.filter(p => p.bundleId === "bundle-full").reduce((sum, p) => sum + ((p.amountTotal || p.amount || 0) / 100), 0),
+      },
+    };
+    
     return NextResponse.json({
       // Primary KPIs
-      mrr: mrr.toFixed(2),
-      arr: arr.toFixed(2),
-      projectedMrr: projectedMrr.toFixed(2),
-      projectedArr: projectedArr.toFixed(2),
+      mrr: flowFilter === "flow-b" ? "N/A" : mrr.toFixed(2), // No MRR for one-time payments
+      arr: flowFilter === "flow-b" ? "N/A" : arr.toFixed(2), // No ARR for one-time payments
+      projectedMrr: flowFilter === "flow-b" ? "N/A" : projectedMrr.toFixed(2),
+      projectedArr: flowFilter === "flow-b" ? "N/A" : projectedArr.toFixed(2),
       activePayingSubscribers: enrichedActivePayingSubscribers.length,
       trialingSubscribers: enrichedTrialingSubscribers.length,
       totalRevenue: totalRevenue.toFixed(2),
@@ -637,6 +679,11 @@ export async function GET(request: NextRequest) {
       
       // Stripe sync info
       stripeSubscriptionsCount: stripeSubscriptions.size,
+      
+      // Flow breakdown
+      flowFilter,
+      flowBreakdown,
+      bundleBreakdown,
     });
   } catch (error: any) {
     console.error("Admin revenue API error:", error);

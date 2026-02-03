@@ -135,6 +135,9 @@ export default function AdminRevenuePage() {
   
   // Subscriber tab
   const [subscriberTab, setSubscriberTab] = useState<"active" | "trialing" | "cancelled">("active");
+  
+  // Flow tab (All, Flow A, Flow B)
+  const [flowTab, setFlowTab] = useState<"all" | "flow-a" | "flow-b">("all");
 
   // Format date with time
   const formatDateTime = (dateString: string | null) => {
@@ -182,7 +185,7 @@ export default function AdminRevenuePage() {
         return;
       }
       
-      const response = await fetch(`/api/admin/revenue?token=${token}`);
+      const response = await fetch(`/api/admin/revenue?token=${token}&flow=${flowTab}`);
       
       if (response.status === 401) {
         // Session invalid or expired, redirect to login
@@ -210,7 +213,7 @@ export default function AdminRevenuePage() {
 
   useEffect(() => {
     fetchData();
-  }, [router]);
+  }, [router, flowTab]); // Re-fetch when flow tab changes
 
   if (loading) {
     return (
@@ -406,6 +409,42 @@ export default function AdminRevenuePage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 space-y-6">
+        {/* Flow Tabs (All, Flow A, Flow B) */}
+        <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setFlowTab("all")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              flowTab === "all"
+                ? "bg-primary text-white shadow-lg"
+                : "text-white/60 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            All Revenue
+          </button>
+          <button
+            onClick={() => setFlowTab("flow-a")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              flowTab === "flow-a"
+                ? "bg-blue-500 text-white shadow-lg"
+                : "text-white/60 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <Repeat className="w-4 h-4" />
+            Flow A (Subscriptions)
+          </button>
+          <button
+            onClick={() => setFlowTab("flow-b")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              flowTab === "flow-b"
+                ? "bg-green-500 text-white shadow-lg"
+                : "text-white/60 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            Flow B (Bundles)
+          </button>
+        </div>
+
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3">
           <button

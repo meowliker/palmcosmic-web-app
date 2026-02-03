@@ -58,10 +58,10 @@ export default function Step15Page() {
 
   const { triggerLight } = useHaptic();
   
-  // Check if email already has an active subscription
+  // Check if email already has an active subscription or bundle purchase
   const checkExistingSubscription = async (emailToCheck: string): Promise<boolean> => {
     try {
-      // Check in users collection for existing subscription
+      // Check in users collection for existing subscription OR bundle purchase
       const usersQuery = query(
         collection(db, "users"),
         where("email", "==", emailToCheck)
@@ -74,21 +74,28 @@ export default function Step15Page() {
         if (userData.subscriptionStatus === "active" || userData.isSubscribed === true) {
           return true;
         }
+        // Check if user has purchased a bundle (Flow B)
+        if (userData.bundlePurchased || userData.purchaseType === "one-time") {
+          return true;
+        }
       }
       
-      // Also check payments collection for completed subscription payments
+      // Also check payments collection for completed subscription OR bundle payments
       const paymentsQuery = query(
         collection(db, "payments"),
-        where("customerEmail", "==", emailToCheck),
-        where("type", "==", "subscription")
+        where("customerEmail", "==", emailToCheck)
       );
       const paymentsSnapshot = await getDocs(paymentsQuery);
       
       if (!paymentsSnapshot.empty) {
-        // Check if any payment has active status
+        // Check if any payment has active/succeeded status
         for (const paymentDoc of paymentsSnapshot.docs) {
           const paymentData = paymentDoc.data();
-          if (paymentData.paymentStatus === "paid" || paymentData.status === "succeeded") {
+          const paymentType = paymentData.type;
+          const isSuccessful = paymentData.paymentStatus === "paid" || paymentData.status === "succeeded";
+          
+          // Block if subscription or bundle payment is successful
+          if (isSuccessful && (paymentType === "subscription" || paymentType === "bundle_payment")) {
             return true;
           }
         }
@@ -105,15 +112,22 @@ export default function Step15Page() {
     triggerLight();
     const trimmed = email.trim();
 
-    if (trimmed.length > 0 && !isValidEmail(trimmed)) {
+    // Email is required
+    if (trimmed.length === 0) {
+      setEmailError("Please enter your email address to continue.");
+      return;
+    }
+
+    // Validate email format
+    if (!isValidEmail(trimmed)) {
       setEmailError("Please enter a valid email address.");
       return;
     }
 
     setEmailError(null);
 
-    // Store email if provided and save to Firebase
-    if (trimmed.length > 0) {
+    // Store email and save to Firebase
+    {
       // Check if email already has an active subscription
       setIsCheckingEmail(true);
       const hasSubscription = await checkExistingSubscription(trimmed);

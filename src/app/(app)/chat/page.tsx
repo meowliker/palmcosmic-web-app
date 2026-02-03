@@ -723,8 +723,18 @@ export default function ChatPage() {
                 ))}
               </div>
 
-              {/* Footer */}
+              {/* Pricing Info */}
               <div className="mt-4 sm:mt-6 text-center">
+                <p className="text-white/60 text-xs sm:text-sm mb-2 flex items-center justify-center gap-1">
+                  💬 1 question = 3
+                  <span className="inline-flex items-center">
+                    <Coins className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
+                  </span>
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-2 sm:mt-3 text-center">
                 <p className="text-white/40 text-[10px] sm:text-xs">
                   Secure payment powered by Stripe • Cancel anytime
                 </p>

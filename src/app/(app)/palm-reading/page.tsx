@@ -29,6 +29,7 @@ export default function PalmReadingPage() {
   const [expandedCosmic, setExpandedCosmic] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [isFlowB, setIsFlowB] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -39,6 +40,11 @@ export default function PalmReadingPage() {
   const birthDate = `${birthYear}-${birthMonth}-${birthDay}`;
 
   useEffect(() => {
+    // Check if user is Flow B
+    const flow = localStorage.getItem("palmcosmic_onboarding_flow");
+    const purchaseType = localStorage.getItem("palmcosmic_purchase_type");
+    setIsFlowB(flow === "flow-b" || purchaseType === "one-time");
+    
     loadExistingReading();
     return () => {
       // Cleanup camera stream
@@ -64,10 +70,17 @@ export default function PalmReadingPage() {
       }
       
       // Check if palm image exists in localStorage (from onboarding)
-      // Don't auto-analyze here - reading should already be generated after paywall
       const savedPalmImage = localStorage.getItem("palmcosmic_palm_image");
       if (savedPalmImage) {
         setCapturedImage(savedPalmImage);
+        // For Flow B users, auto-analyze if they have a palm image but no reading
+        const flow = localStorage.getItem("palmcosmic_onboarding_flow");
+        if (flow === "flow-b") {
+          setLoading(false);
+          // Auto-analyze the palm image
+          analyzePalm(savedPalmImage);
+          return;
+        }
       }
       
       setLoading(false);
@@ -576,16 +589,21 @@ export default function PalmReadingPage() {
               <span className="text-white text-sm">← Back</span>
             </button>
             <h1 className="text-white text-lg font-bold">Results</h1>
-            <button 
-              onClick={() => {
-                setReading(null);
-                setCapturedImage(null);
-              }} 
-              className="px-4 py-2 bg-white/10 rounded-full border border-white/20 flex items-center gap-1"
-            >
-              <Camera className="w-4 h-4 text-white" />
-              <span className="text-white text-sm">New Scan</span>
-            </button>
+            {/* Only show New Scan button for Flow A (subscription) users */}
+            {!isFlowB ? (
+              <button 
+                onClick={() => {
+                  setReading(null);
+                  setCapturedImage(null);
+                }} 
+                className="px-4 py-2 bg-white/10 rounded-full border border-white/20 flex items-center gap-1"
+              >
+                <Camera className="w-4 h-4 text-white" />
+                <span className="text-white text-sm">New Scan</span>
+              </button>
+            ) : (
+              <div className="w-24" /> // Placeholder for layout balance
+            )}
           </div>
         </div>
 
@@ -653,28 +671,30 @@ export default function PalmReadingPage() {
               </motion.div>
             </AnimatePresence>
 
-            {/* Actions */}
-            <div className="pt-4 space-y-3">
-              <Button
-                onClick={() => {
-                  setReading(null);
-                  setCapturedImage(null);
-                }}
-                variant="outline"
-                className="w-full border-white/20 text-white hover:bg-white/10"
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                New Reading
-              </Button>
+            {/* Actions - Only show for Flow A users */}
+            {!isFlowB && (
+              <div className="pt-4 space-y-3">
+                <Button
+                  onClick={() => {
+                    setReading(null);
+                    setCapturedImage(null);
+                  }}
+                  variant="outline"
+                  className="w-full border-white/20 text-white hover:bg-white/10"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  New Reading
+                </Button>
 
-              <button
-                onClick={handleDeleteReading}
-                className="w-full py-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 font-semibold flex items-center justify-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete This Reading
-              </button>
-            </div>
+                <button
+                  onClick={handleDeleteReading}
+                  className="w-full py-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 font-semibold flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete This Reading
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

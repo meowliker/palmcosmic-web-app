@@ -111,6 +111,8 @@ export async function POST(request: NextRequest) {
         name: userData.name,
         subscriptionPlan: userData.subscriptionPlan,
         coins: userData.coins,
+        onboardingFlow: userData.onboardingFlow,
+        purchaseType: userData.purchaseType,
       },
     });
   } catch (error: any) {
