@@ -151,6 +151,7 @@ export default function Step17Page() {
   const [showStickyCTA, setShowStickyCTA] = useState(false);
   const [readingStats, setReadingStats] = useState<Array<{label: string; color: string; value: number}>>([]);
   const [compatibilityStats, setCompatibilityStats] = useState<Array<{label: string; color: string; value: number}>>([]);
+  const checkoutStartedRef = useRef(false);
   
   // Get user data from onboarding store
   const { gender, birthYear, birthMonth, birthDay, sunSign, moonSign, ascendantSign } = useOnboardingStore();
@@ -271,7 +272,30 @@ export default function Step17Page() {
     setReadingStats(generateRandomStats());
     setCompatibilityStats(generateCompatibilityStats());
     
-    return () => window.removeEventListener("pageshow", handlePageShow);
+    // Track bounce when user leaves page without starting checkout
+    const trackBounce = () => {
+      if (!checkoutStartedRef.current) {
+        const bounceKey = "palmcosmic_ab_bounce_A";
+        if (!sessionStorage.getItem(bounceKey)) {
+          sessionStorage.setItem(bounceKey, "true");
+          // Use sendBeacon for reliable tracking on page unload
+          const data = JSON.stringify({
+            testId: "pricing-test-1",
+            variant: "A",
+            eventType: "bounce",
+            visitorId: localStorage.getItem("palmcosmic_visitor_id") || generateUserId(),
+          });
+          navigator.sendBeacon("/api/ab-test/event", new Blob([data], { type: "application/json" }));
+        }
+      }
+    };
+    
+    window.addEventListener("beforeunload", trackBounce);
+    
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("beforeunload", trackBounce);
+    };
   }, [router]);
 
   // Intersection observer for testimonial and birth chart sections sticky CTA
@@ -391,6 +415,9 @@ export default function Step17Page() {
     
     // Save selected plan to localStorage for Purchase tracking on success page
     localStorage.setItem("palmcosmic_selected_plan", plan);
+    
+    // Mark checkout as started to prevent bounce tracking
+    checkoutStartedRef.current = true;
     
     // Track A/B test checkout_started event
     fetch("/api/ab-test/event", {

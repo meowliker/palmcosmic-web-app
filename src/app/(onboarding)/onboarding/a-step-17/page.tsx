@@ -144,6 +144,7 @@ export default function AStep17Page() {
   const [showStickyCTA, setShowStickyCTA] = useState(false);
   const [readingStats, setReadingStats] = useState<Array<{label: string; color: string; value: number}>>([]);
   const [compatibilityStats, setCompatibilityStats] = useState<Array<{label: string; color: string; value: number}>>([]);
+  const checkoutStartedRef = useRef(false);
   
   const { gender, birthYear, birthMonth, birthDay, sunSign, moonSign, ascendantSign } = useOnboardingStore();
   const { firebaseUserId } = useUserStore();
@@ -217,7 +218,30 @@ export default function AStep17Page() {
     setReadingStats(generateRandomStats());
     setCompatibilityStats(generateCompatibilityStats());
     
-    return () => window.removeEventListener("pageshow", handlePageShow);
+    // Track bounce when user leaves page without starting checkout
+    const trackBounce = () => {
+      if (!checkoutStartedRef.current) {
+        const bounceKey = "palmcosmic_ab_bounce_B";
+        if (!sessionStorage.getItem(bounceKey)) {
+          sessionStorage.setItem(bounceKey, "true");
+          // Use sendBeacon for reliable tracking on page unload
+          const data = JSON.stringify({
+            testId: "pricing-test-1",
+            variant: "B",
+            eventType: "bounce",
+            visitorId: localStorage.getItem("palmcosmic_visitor_id") || generateUserId(),
+          });
+          navigator.sendBeacon("/api/ab-test/event", new Blob([data], { type: "application/json" }));
+        }
+      }
+    };
+    
+    window.addEventListener("beforeunload", trackBounce);
+    
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("beforeunload", trackBounce);
+    };
   }, [router]);
 
   useEffect(() => {
@@ -334,6 +358,9 @@ export default function AStep17Page() {
     
     localStorage.setItem("palmcosmic_selected_plan", plan);
     localStorage.setItem("palmcosmic_ab_variant", "B");
+    
+    // Mark checkout as started to prevent bounce tracking
+    checkoutStartedRef.current = true;
     
     // Track A/B test checkout_started event
     fetch("/api/ab-test/event", {
