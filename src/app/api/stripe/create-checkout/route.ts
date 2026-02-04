@@ -8,6 +8,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const TRIAL_PRICE_IDS: Record<string, string> = {
   "1week": process.env.STRIPE_PRICE_1WEEK_TRIAL!, // $1 trial
   "2week": process.env.STRIPE_PRICE_2WEEK_TRIAL!, // $5.49 trial
+  "4week": process.env.STRIPE_PRICE_4WEEK_TRIAL!, // $9.99 trial
   // A/B Test Variant B - Trial Prices
   "1week-v2": process.env.STRIPE_PRICE_1WEEK_TRIAL_V2!, // $2.99 trial
   "4week-v2": process.env.STRIPE_PRICE_4WEEK_TRIAL_V2!, // $7.99 trial
@@ -18,6 +19,7 @@ const TRIAL_PRICE_IDS: Record<string, string> = {
 const SUBSCRIPTION_PRICE_IDS: Record<string, string> = {
   "1week": process.env.STRIPE_PRICE_2WEEK_PLAN!,  // $19.99 every 2 weeks
   "2week": process.env.STRIPE_PRICE_2WEEK_PLAN!,  // $19.99 every 2 weeks
+  "4week": process.env.STRIPE_PRICE_MONTHLY_PLAN!, // $29.99 every month
   "yearly": process.env.STRIPE_PRICE_YEARLY2!,    // $49.99 yearly (no trial)
   // A/B Test Variant B - All convert to $49.99/month
   "1week-v2": process.env.STRIPE_PRICE_MONTHLY_V2!,  // $49.99/month
@@ -29,6 +31,7 @@ const SUBSCRIPTION_PRICE_IDS: Record<string, string> = {
 const TRIAL_DAYS: Record<string, number> = {
   "1week": 7,   // 1-week trial
   "2week": 14,  // 2-week trial
+  "4week": 28,  // 4-week trial
   "yearly": 0,  // No trial for yearly
   // A/B Test Variant B - Trial periods
   "1week-v2": 7,   // 1-week trial
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if it's a new trial plan, yearly plan, variant B plan, or legacy plan
-    const isNewTrialPlan = ["1week", "2week"].includes(plan);
+    const isNewTrialPlan = ["1week", "2week", "4week"].includes(plan);
     const isVariantBPlan = ["1week-v2", "4week-v2", "12week-v2"].includes(plan);
     const isYearlyPlan = plan === "yearly";
     

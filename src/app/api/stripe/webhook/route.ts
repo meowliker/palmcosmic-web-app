@@ -308,7 +308,7 @@ export async function POST(request: NextRequest) {
               // Track A/B test conversion
               if (abVariant) {
                 try {
-                  const trialAmount = plan === "1week-v2" ? 2.99 : plan === "4week-v2" ? 7.99 : plan === "12week-v2" ? 14.99 : plan === "1week" ? 1 : 5.49;
+                  const trialAmount = plan === "1week-v2" ? 2.99 : plan === "4week-v2" ? 7.99 : plan === "12week-v2" ? 14.99 : plan === "1week" ? 1 : plan === "4week" ? 9.99 : 5.49;
                   await adminDb.collection("abTestEvents").add({
                     testId: "pricing-test-1",
                     variant: abVariant,

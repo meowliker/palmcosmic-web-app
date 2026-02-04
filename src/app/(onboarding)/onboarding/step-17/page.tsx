@@ -126,15 +126,14 @@ const pricingPlans = [
     popular: true,
   },
   {
-    id: "yearly",
-    name: "Yearly Plan",
-    trialPrice: "$49.99",
-    perDayPrice: "$0.13",
-    originalPrice: "$519.74",
-    trialDays: 0,
-    afterTrialPrice: "$49.99",
-    afterTrialPeriod: "Yearly",
-    bestValue: true,
+    id: "4week",
+    name: "4-Week Trial",
+    trialPrice: "$9.99",
+    perDayPrice: "$0.36",
+    originalPrice: "$19.99",
+    trialDays: 28,
+    afterTrialPrice: "$29.99",
+    afterTrialPeriod: "1-Month Plan",
   },
 ];
 
@@ -623,14 +622,14 @@ export default function Step17Page() {
                     <span className="text-muted-foreground line-through">{plan.originalPrice}</span>
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {(plan as any).yearlyEquivalent}
+                    then {plan.afterTrialPeriod} {plan.afterTrialPrice}
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-2xl font-bold">{(plan as any).perDayPrice}</span>
-                  <p className="text-xs text-muted-foreground">
-                    per day
+                  <span className="text-2xl font-bold">{plan.trialPrice}</span>
+                  <p className="text-xs text-muted-foreground uppercase">
+                    {plan.trialDays === 7 ? "1-WEEK" : plan.trialDays === 14 ? "2-WEEK" : plan.trialDays === 28 ? "4-WEEK" : ""} trial
                   </p>
                 </div>
               </div>
@@ -687,7 +686,7 @@ export default function Step17Page() {
               <a href="/Terms/money-back-policy.html" target="_blank" className="text-primary underline">Money-back Policy</a>.
               {selectedPlan === "yearly" 
                 ? " Subscribe for $49.99/year. You'll be charged $49.99 yearly until canceled."
-                : ` Start your ${selectedPlan === "1week" ? "7-day" : "14-day"} trial for ${selectedPlan === "1week" ? "$1" : "$5.49"}. After the trial, you'll be charged $19.99 every 2 weeks until canceled.`}
+                : ` Start your ${selectedPlan === "1week" ? "7-day" : selectedPlan === "2week" ? "14-day" : "28-day"} trial for ${selectedPlan === "1week" ? "$1" : selectedPlan === "2week" ? "$5.49" : "$9.99"}. After the trial, you'll be charged ${selectedPlan === "4week" ? "$29.99 every month" : "$19.99 every 2 weeks"} until canceled.`}
               {" "}By completing your purchase, you consent to us securely storing your payment details for future charges. No refunds for partial periods. You can cancel subscription anytime via account settings or by contacting support at weatpalmcosmic@gmail.com.
             </span>
           </label>
