@@ -137,7 +137,7 @@ export default function SettingsPage() {
               className="bg-[#1A1F2E] rounded-2xl border border-white/10 overflow-hidden"
             >
               <button
-                onClick={() => window.open("/privacy-policy", "_blank")}
+                onClick={() => window.open("/Terms/privacy-policy.html", "_blank")}
                 className="w-full p-4 flex items-center gap-3 hover:bg-white/5 transition-colors border-b border-white/10"
               >
                 <FileText className="w-5 h-5 text-white/50" />
@@ -145,7 +145,7 @@ export default function SettingsPage() {
                 <ChevronRight className="w-5 h-5 text-white/30" />
               </button>
               <button
-                onClick={() => window.open("/terms-of-service", "_blank")}
+                onClick={() => window.open("/Terms/terms-of-service.html", "_blank")}
                 className="w-full p-4 flex items-center gap-3 hover:bg-white/5 transition-colors border-b border-white/10"
               >
                 <FileText className="w-5 h-5 text-white/50" />
@@ -153,7 +153,7 @@ export default function SettingsPage() {
                 <ChevronRight className="w-5 h-5 text-white/30" />
               </button>
               <button
-                onClick={() => window.open("/contact-us", "_blank")}
+                onClick={() => window.open("/Terms/contact-us.html", "_blank")}
                 className="w-full p-4 flex items-center gap-3 hover:bg-white/5 transition-colors"
               >
                 <Mail className="w-5 h-5 text-white/50" />
