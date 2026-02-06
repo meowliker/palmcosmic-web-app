@@ -65,6 +65,16 @@ const coinPackages = [
   },
 ];
 
+function formatMessage(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export default function ChatPage() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -541,7 +551,7 @@ export default function ChatPage() {
                 </div>
               )}
 
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{formatMessage(message.content)}</p>
               <p className="text-[10px] opacity-50 mt-2">
                 {(message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp)).toLocaleTimeString([], {
                   hour: "2-digit",

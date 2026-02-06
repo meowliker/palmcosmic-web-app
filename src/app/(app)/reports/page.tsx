@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Star, Sun, Moon, Sparkles, Loader2, Lock, MessageCircle } from "lucide-react";
+import { ChevronRight, Star, Sun, Moon, Sparkles, Loader2, Lock, MessageCircle, Lightbulb, CheckCircle, XCircle, Clock } from "lucide-react";
 import Image from "next/image";
 import { getZodiacSign, getZodiacSymbol, getZodiacColor } from "@/lib/astrology-api";
 import { useOnboardingStore } from "@/lib/onboarding-store";
@@ -22,6 +22,17 @@ interface DailyData {
   nakshatra?: any;
 }
 
+interface DailyInsights {
+  dailyTip: string;
+  dos: string[];
+  donts: string[];
+  luckyTime: string;
+  luckyNumber: number;
+  luckyColor: string;
+  mood: string;
+  compatibility: string | null;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [dailyData, setDailyData] = useState<DailyData | null>(null);
@@ -36,9 +47,11 @@ export default function DashboardPage() {
   const [birthChartTimerActive, setBirthChartTimerActive] = useState(false);
   const [birthChartTimerStartedAt, setBirthChartTimerStartedAt] = useState<string | null>(null);
   const [birthChartTimerExpired, setBirthChartTimerExpired] = useState(false);
+  const [dailyInsights, setDailyInsights] = useState<DailyInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
 
-  // Get ascendant sign from onboarding store as fallback
-  const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, ascendantSign: storeAscendantSign } = useOnboardingStore();
+  // Get sun sign from onboarding store as fallback
+  const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, sunSign: storeSunSign } = useOnboardingStore();
   
   // Get unlocked features from user store
   const { unlockedFeatures, birthChartGenerating, birthChartReady, syncFromFirebase } = useUserStore();
@@ -47,6 +60,12 @@ export default function DashboardPage() {
     loadUserZodiac();
     fetchDailyData();
   }, []);
+
+  useEffect(() => {
+    if (userZodiac.sign) {
+      fetchDailyInsights();
+    }
+  }, [userZodiac.sign]);
 
   const loadUserZodiac = async () => {
     try {
@@ -87,19 +106,25 @@ export default function DashboardPage() {
             setBirthChartTimerStartedAt(data.birthChartTimerStartedAt);
           }
           
-          // Use ascendant sign for daily horoscope
-          if (data.ascendantSign) {
-            // Handle both object and string formats
-            const signName = typeof data.ascendantSign === "string" 
-              ? data.ascendantSign 
-              : data.ascendantSign.name;
-            if (signName) {
-              setUserZodiac({
-                sign: signName,
-                symbol: getZodiacSymbol(signName),
-                color: getZodiacColor(signName),
-              });
+          // Calculate sun sign from birth date - this is the ONLY source of truth
+          if (data.birthMonth && data.birthDay) {
+            const month = Number(data.birthMonth);
+            const day = Number(data.birthDay);
+            const sign = getZodiacSign(month, day);
+            setUserZodiac({
+              sign,
+              symbol: getZodiacSymbol(sign),
+              color: getZodiacColor(sign),
+            });
+            
+            // Also try to get email from localStorage as fallback
+            const storedEmail = localStorage.getItem("palmcosmic_email");
+            if (storedEmail && !userEmail) {
+              setUserEmail(storedEmail);
             }
+            
+            // We got the sun sign, exit early
+            return;
           }
         }
       }
@@ -109,17 +134,28 @@ export default function DashboardPage() {
       if (storedEmail && !userEmail) {
         setUserEmail(storedEmail);
       }
-
-      // Fallback to onboarding store ascendant sign
-      if (storeAscendantSign?.name) {
-        setUserZodiac({
-          sign: storeAscendantSign.name,
-          symbol: getZodiacSymbol(storeAscendantSign.name),
-          color: getZodiacColor(storeAscendantSign.name),
-        });
-      }
     } catch (error) {
       console.error("Error loading user zodiac:", error);
+    }
+    
+    // Fallback to onboarding store sun sign or calculate from birth date
+    // This only runs if Firebase fetch failed or user not found
+    if (storeSunSign?.name) {
+      setUserZodiac({
+        sign: storeSunSign.name,
+        symbol: getZodiacSymbol(storeSunSign.name),
+        color: getZodiacColor(storeSunSign.name),
+      });
+    } else if (storeBirthMonth && storeBirthDay) {
+      // Calculate sun sign from birth date
+      const month = Number(storeBirthMonth);
+      const day = Number(storeBirthDay);
+      const sign = getZodiacSign(month, day);
+      setUserZodiac({
+        sign,
+        symbol: getZodiacSymbol(sign),
+        color: getZodiacColor(sign),
+      });
     }
   };
 
@@ -145,6 +181,24 @@ export default function DashboardPage() {
       console.error("Failed to fetch daily data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDailyInsights = async () => {
+    try {
+      setInsightsLoading(true);
+      const response = await fetch(`/api/horoscope/daily-insights?sign=${userZodiac.sign}`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setDailyInsights(result.data);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch daily insights:", error);
+    } finally {
+      setInsightsLoading(false);
     }
   };
 
@@ -213,6 +267,105 @@ export default function DashboardPage() {
                 <ChevronRight className="w-6 h-6 text-purple-300 group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
+            
+            {/* Daily Insights - Horizontally Scrollable Cards */}
+            {!insightsLoading && dailyInsights && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="space-y-3"
+              >
+                <h2 className="text-white font-semibold text-lg px-1">Today's Insights</h2>
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory">
+                  {/* Daily Tip Card */}
+                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-2xl p-4 border border-amber-500/30 snap-start">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-500/30 flex items-center justify-center">
+                        <Lightbulb className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <h3 className="text-white font-semibold">Daily Tip</h3>
+                    </div>
+                    <p className="text-white/80 text-sm leading-relaxed">
+                      {dailyInsights.dailyTip}
+                    </p>
+                  </div>
+
+                  {/* Do's Card */}
+                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-2xl p-4 border border-green-500/30 snap-start">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-green-500/30 flex items-center justify-center">
+                        <CheckCircle className="w-5 h-5 text-green-400" />
+                      </div>
+                      <h3 className="text-white font-semibold">Do's</h3>
+                    </div>
+                    <ul className="space-y-2">
+                      {dailyInsights.dos.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-white/80 text-sm">
+                          <span className="text-green-400 mt-0.5">✓</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Don'ts Card */}
+                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-red-500/20 to-rose-500/20 rounded-2xl p-4 border border-red-500/30 snap-start">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-red-500/30 flex items-center justify-center">
+                        <XCircle className="w-5 h-5 text-red-400" />
+                      </div>
+                      <h3 className="text-white font-semibold">Don'ts</h3>
+                    </div>
+                    <ul className="space-y-2">
+                      {dailyInsights.donts.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-white/80 text-sm">
+                          <span className="text-red-400 mt-0.5">✗</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Today's Luck Card */}
+                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-2xl p-4 border border-purple-500/30 snap-start">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-purple-500/30 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <h3 className="text-white font-semibold">Today's Luck</h3>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/60 text-sm">Lucky Time</span>
+                        <div className="flex items-center gap-1 text-purple-400">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-sm font-medium">{dailyInsights.luckyTime}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/60 text-sm">Lucky Number</span>
+                        <span className="text-purple-400 text-lg font-bold">{dailyInsights.luckyNumber}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/60 text-sm">Lucky Color</span>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-6 h-6 rounded-full border-2 border-white/30"
+                            style={{ backgroundColor: dailyInsights.luckyColor.toLowerCase() }}
+                          />
+                          <span className="text-purple-400 text-sm font-medium">{dailyInsights.luckyColor}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/60 text-sm">Mood</span>
+                        <span className="text-purple-400 text-sm font-medium">{dailyInsights.mood}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
             
             {/* Daily Horoscope */}
             <motion.div
