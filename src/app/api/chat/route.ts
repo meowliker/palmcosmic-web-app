@@ -216,7 +216,7 @@ interface UserProfile {
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, userProfile, palmImageBase64, palmReading, context } = await request.json();
+    const { message, userProfile, palmImageBase64, palmReading, natalChart, context } = await request.json();
 
     if (!message) {
       return NextResponse.json(
@@ -225,19 +225,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // DEBUG: Temporarily log palmReading structure to verify field names
-    // Remove this after verifying the structure
-    if (palmReading) {
-      console.log("[Chat API] palmReading keys:", Object.keys(palmReading));
-      console.log("[Chat API] palmReading preview:", JSON.stringify(palmReading, null, 2).substring(0, 500));
-    }
-
     // Load prompt files
     const elysiaSystemPrompt = loadPrompt("elysia_chatbot_system.txt");
     const interpretationRules = loadPrompt("elysia_interpretation_rules.txt");
 
+    // Merge natalChart data into palmReading so buildUserContext can find chart/dasha/transits
+    const mergedData = {
+      ...palmReading,
+      ...(natalChart || {}),
+    };
+
     // Build structured user context from palm + chart data
-    const structuredContext = buildUserContext(userProfile, palmReading);
+    const structuredContext = buildUserContext(userProfile, mergedData);
 
     // Build full system prompt with loaded prompts + user data
     const fullSystemPrompt = `${elysiaSystemPrompt}\n\n${interpretationRules}\n\n=== THIS USER'S PERSONAL DATA ===\n${structuredContext}`;

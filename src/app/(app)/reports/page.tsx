@@ -61,11 +61,12 @@ export default function DashboardPage() {
     fetchDailyData();
   }, []);
 
-  useEffect(() => {
-    if (userZodiac.sign) {
-      fetchDailyInsights();
-    }
-  }, [userZodiac.sign]);
+  // TODO: Re-enable daily insights later
+  // useEffect(() => {
+  //   if (userZodiac.sign) {
+  //     fetchDailyInsights();
+  //   }
+  // }, [userZodiac.sign]);
 
   const loadUserZodiac = async () => {
     try {
@@ -268,104 +269,7 @@ export default function DashboardPage() {
               </div>
             </motion.div>
             
-            {/* Daily Insights - Horizontally Scrollable Cards */}
-            {!insightsLoading && dailyInsights && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 }}
-                className="space-y-3"
-              >
-                <h2 className="text-white font-semibold text-lg px-1">Today's Insights</h2>
-                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory">
-                  {/* Daily Tip Card */}
-                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-2xl p-4 border border-amber-500/30 snap-start">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-amber-500/30 flex items-center justify-center">
-                        <Lightbulb className="w-5 h-5 text-amber-400" />
-                      </div>
-                      <h3 className="text-white font-semibold">Daily Tip</h3>
-                    </div>
-                    <p className="text-white/80 text-sm leading-relaxed">
-                      {dailyInsights.dailyTip}
-                    </p>
-                  </div>
-
-                  {/* Do's Card */}
-                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-2xl p-4 border border-green-500/30 snap-start">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-green-500/30 flex items-center justify-center">
-                        <CheckCircle className="w-5 h-5 text-green-400" />
-                      </div>
-                      <h3 className="text-white font-semibold">Do's</h3>
-                    </div>
-                    <ul className="space-y-2">
-                      {dailyInsights.dos.map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-white/80 text-sm">
-                          <span className="text-green-400 mt-0.5">✓</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Don'ts Card */}
-                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-red-500/20 to-rose-500/20 rounded-2xl p-4 border border-red-500/30 snap-start">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-red-500/30 flex items-center justify-center">
-                        <XCircle className="w-5 h-5 text-red-400" />
-                      </div>
-                      <h3 className="text-white font-semibold">Don'ts</h3>
-                    </div>
-                    <ul className="space-y-2">
-                      {dailyInsights.donts.map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-white/80 text-sm">
-                          <span className="text-red-400 mt-0.5">✗</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Today's Luck Card */}
-                  <div className="flex-shrink-0 w-72 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-2xl p-4 border border-purple-500/30 snap-start">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-purple-500/30 flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-purple-400" />
-                      </div>
-                      <h3 className="text-white font-semibold">Today's Luck</h3>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-white/60 text-sm">Lucky Time</span>
-                        <div className="flex items-center gap-1 text-purple-400">
-                          <Clock className="w-4 h-4" />
-                          <span className="text-sm font-medium">{dailyInsights.luckyTime}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-white/60 text-sm">Lucky Number</span>
-                        <span className="text-purple-400 text-lg font-bold">{dailyInsights.luckyNumber}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-white/60 text-sm">Lucky Color</span>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-6 h-6 rounded-full border-2 border-white/30"
-                            style={{ backgroundColor: dailyInsights.luckyColor.toLowerCase() }}
-                          />
-                          <span className="text-purple-400 text-sm font-medium">{dailyInsights.luckyColor}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-white/60 text-sm">Mood</span>
-                        <span className="text-purple-400 text-sm font-medium">{dailyInsights.mood}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            {/* TODO: Today's Insights section - hidden for now, will work on later */}
             
             {/* Daily Horoscope */}
             <motion.div
