@@ -200,7 +200,10 @@ export default function EditProfilePage() {
           try {
             const response = await fetch("/api/astrology/signs", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "x-user-id": userId,
+              },
               body: JSON.stringify({
                 birthMonth: newBirthMonth,
                 birthDay: newBirthDay,

@@ -65,6 +65,16 @@ const coinPackages = [
   },
 ];
 
+function formatMessage(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export default function ChatPage() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -78,6 +88,7 @@ export default function ChatPage() {
   const [purchaseError, setPurchaseError] = useState("");
   const [purchasingPackage, setPurchasingPackage] = useState<number | null>(null);
   const [palmReading, setPalmReading] = useState<any>(null);
+  const [natalChart, setNatalChart] = useState<any>(null);
   const [chatLoaded, setChatLoaded] = useState(false);
   const [showLowBalanceBubble, setShowLowBalanceBubble] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -169,6 +180,48 @@ export default function ChatPage() {
         }
       } catch (err) {
         console.error("[Chat] Failed to load palm reading:", err);
+      }
+
+      // Load natal chart from Firebase (calculated by astro-engine)
+      try {
+        const chartDocSnap = await getDoc(doc(db, "natal_charts", userId));
+        if (chartDocSnap.exists()) {
+          setNatalChart(chartDocSnap.data());
+          console.log("[Chat] Loaded natal chart from Firestore");
+        } else {
+          // No chart saved yet — calculate it now via astro-engine
+          console.log("[Chat] No natal chart found, calculating...");
+          try {
+            const signsResponse = await fetch("/api/astrology/signs", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-user-id": userId,
+              },
+              body: JSON.stringify({
+                birthMonth,
+                birthDay,
+                birthYear,
+                birthHour,
+                birthMinute,
+                birthPeriod,
+                birthPlace,
+              }),
+            });
+            if (signsResponse.ok) {
+              // Re-fetch the chart that was just saved
+              const newChartSnap = await getDoc(doc(db, "natal_charts", userId));
+              if (newChartSnap.exists()) {
+                setNatalChart(newChartSnap.data());
+                console.log("[Chat] Natal chart calculated and loaded");
+              }
+            }
+          } catch (calcErr) {
+            console.error("[Chat] Failed to calculate natal chart:", calcErr);
+          }
+        }
+      } catch (err) {
+        console.error("[Chat] Failed to load natal chart:", err);
       }
 
       // Load chat history from Firebase
@@ -313,8 +366,9 @@ export default function ChatPage() {
           userProfile,
           palmImageBase64: palmImage,
           palmReading: palmReading,
+          natalChart: natalChart,
           context: {
-            previousMessages: messages.slice(-5),
+            previousMessages: messages.slice(-20),
           },
         }),
       });
@@ -541,7 +595,7 @@ export default function ChatPage() {
                 </div>
               )}
 
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{formatMessage(message.content)}</p>
               <p className="text-[10px] opacity-50 mt-2">
                 {(message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp)).toLocaleTimeString([], {
                   hour: "2-digit",

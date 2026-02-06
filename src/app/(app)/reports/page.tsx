@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Star, Sun, Moon, Sparkles, Loader2, Lock, MessageCircle } from "lucide-react";
+import { ChevronRight, Star, Sun, Moon, Sparkles, Loader2, Lock, MessageCircle, Lightbulb, CheckCircle, XCircle, Clock } from "lucide-react";
 import Image from "next/image";
 import { getZodiacSign, getZodiacSymbol, getZodiacColor } from "@/lib/astrology-api";
 import { useOnboardingStore } from "@/lib/onboarding-store";
@@ -22,6 +22,17 @@ interface DailyData {
   nakshatra?: any;
 }
 
+interface DailyInsights {
+  dailyTip: string;
+  dos: string[];
+  donts: string[];
+  luckyTime: string;
+  luckyNumber: number;
+  luckyColor: string;
+  mood: string;
+  compatibility: string | null;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [dailyData, setDailyData] = useState<DailyData | null>(null);
@@ -36,9 +47,11 @@ export default function DashboardPage() {
   const [birthChartTimerActive, setBirthChartTimerActive] = useState(false);
   const [birthChartTimerStartedAt, setBirthChartTimerStartedAt] = useState<string | null>(null);
   const [birthChartTimerExpired, setBirthChartTimerExpired] = useState(false);
+  const [dailyInsights, setDailyInsights] = useState<DailyInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
 
-  // Get ascendant sign from onboarding store as fallback
-  const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, ascendantSign: storeAscendantSign } = useOnboardingStore();
+  // Get sun sign from onboarding store as fallback
+  const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, sunSign: storeSunSign } = useOnboardingStore();
   
   // Get unlocked features from user store
   const { unlockedFeatures, birthChartGenerating, birthChartReady, syncFromFirebase } = useUserStore();
@@ -47,6 +60,13 @@ export default function DashboardPage() {
     loadUserZodiac();
     fetchDailyData();
   }, []);
+
+  // TODO: Re-enable daily insights later
+  // useEffect(() => {
+  //   if (userZodiac.sign) {
+  //     fetchDailyInsights();
+  //   }
+  // }, [userZodiac.sign]);
 
   const loadUserZodiac = async () => {
     try {
@@ -87,19 +107,25 @@ export default function DashboardPage() {
             setBirthChartTimerStartedAt(data.birthChartTimerStartedAt);
           }
           
-          // Use ascendant sign for daily horoscope
-          if (data.ascendantSign) {
-            // Handle both object and string formats
-            const signName = typeof data.ascendantSign === "string" 
-              ? data.ascendantSign 
-              : data.ascendantSign.name;
-            if (signName) {
-              setUserZodiac({
-                sign: signName,
-                symbol: getZodiacSymbol(signName),
-                color: getZodiacColor(signName),
-              });
+          // Calculate sun sign from birth date - this is the ONLY source of truth
+          if (data.birthMonth && data.birthDay) {
+            const month = Number(data.birthMonth);
+            const day = Number(data.birthDay);
+            const sign = getZodiacSign(month, day);
+            setUserZodiac({
+              sign,
+              symbol: getZodiacSymbol(sign),
+              color: getZodiacColor(sign),
+            });
+            
+            // Also try to get email from localStorage as fallback
+            const storedEmail = localStorage.getItem("palmcosmic_email");
+            if (storedEmail && !userEmail) {
+              setUserEmail(storedEmail);
             }
+            
+            // We got the sun sign, exit early
+            return;
           }
         }
       }
@@ -109,17 +135,28 @@ export default function DashboardPage() {
       if (storedEmail && !userEmail) {
         setUserEmail(storedEmail);
       }
-
-      // Fallback to onboarding store ascendant sign
-      if (storeAscendantSign?.name) {
-        setUserZodiac({
-          sign: storeAscendantSign.name,
-          symbol: getZodiacSymbol(storeAscendantSign.name),
-          color: getZodiacColor(storeAscendantSign.name),
-        });
-      }
     } catch (error) {
       console.error("Error loading user zodiac:", error);
+    }
+    
+    // Fallback to onboarding store sun sign or calculate from birth date
+    // This only runs if Firebase fetch failed or user not found
+    if (storeSunSign?.name) {
+      setUserZodiac({
+        sign: storeSunSign.name,
+        symbol: getZodiacSymbol(storeSunSign.name),
+        color: getZodiacColor(storeSunSign.name),
+      });
+    } else if (storeBirthMonth && storeBirthDay) {
+      // Calculate sun sign from birth date
+      const month = Number(storeBirthMonth);
+      const day = Number(storeBirthDay);
+      const sign = getZodiacSign(month, day);
+      setUserZodiac({
+        sign,
+        symbol: getZodiacSymbol(sign),
+        color: getZodiacColor(sign),
+      });
     }
   };
 
@@ -145,6 +182,24 @@ export default function DashboardPage() {
       console.error("Failed to fetch daily data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDailyInsights = async () => {
+    try {
+      setInsightsLoading(true);
+      const response = await fetch(`/api/horoscope/daily-insights?sign=${userZodiac.sign}`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setDailyInsights(result.data);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch daily insights:", error);
+    } finally {
+      setInsightsLoading(false);
     }
   };
 
@@ -213,6 +268,8 @@ export default function DashboardPage() {
                 <ChevronRight className="w-6 h-6 text-purple-300 group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
+            
+            {/* TODO: Today's Insights section - hidden for now, will work on later */}
             
             {/* Daily Horoscope */}
             <motion.div

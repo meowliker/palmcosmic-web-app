@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
-const HOROSCOPE_API_BASE = "https://horoscope-app-api.vercel.app/api/v1";
+// Divine API Configuration
+const DIVINE_API_KEY = process.env.DIVINE_API_KEY || "";
+const DIVINE_API_URL = "https://divineapi.com/api/1.0";
+
+// Fallback API
+const FALLBACK_API_BASE = "https://horoscope-app-api.vercel.app/api/v1";
 
 const ZODIAC_SIGNS = [
   "aries", "taurus", "gemini", "cancer", "leo", "virgo",
@@ -35,32 +40,118 @@ function getMonthKey(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-// Fetch horoscope from external API
-async function fetchHoroscopeFromAPI(sign: string, period: string, day: string = "TODAY") {
-  let endpoint = "";
+// Fetch horoscope from Divine API
+async function fetchFromDivineAPI(sign: string, period: string, day: string = "today") {
+  // Calculate date based on day parameter
+  const now = new Date();
+  let targetDate = now;
+  if (day.toLowerCase() === "tomorrow") {
+    targetDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  } else if (day.toLowerCase() === "yesterday") {
+    targetDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  }
+  const dateStr = targetDate.toISOString().split("T")[0];
+
+  // Divine API uses form-urlencoded format
+  const formData = new URLSearchParams();
+  formData.append("api_key", DIVINE_API_KEY);
+  formData.append("sign", sign.toLowerCase());
+  formData.append("date", dateStr);
+
+  const response = await fetch(`${DIVINE_API_URL}/get_daily_horoscope.php`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: formData.toString(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Divine API request failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  
+  // Check for API error response
+  if (data.success === 0) {
+    throw new Error(data.message || "Divine API returned error");
+  }
+  
+  // Transform Divine API response to match our expected format
+  const prediction = data.data?.prediction || {};
+  const luckInfo = prediction.luck || [];
+  
+  // Extract lucky info from luck array
+  let luckyColor = null;
+  let luckyNumber = null;
+  for (const item of luckInfo) {
+    if (typeof item === "string") {
+      if (item.includes("Colors of the day")) {
+        luckyColor = item.replace(/Colors of the day\s*[:\u2013]\s*/i, "").trim();
+      }
+      if (item.includes("Lucky Numbers of the day")) {
+        luckyNumber = item.replace(/Lucky Numbers of the day\s*[:\u2013]\s*/i, "").trim();
+      }
+    }
+  }
+  
+  // Combine all prediction text
+  const horoscopeText = [
+    prediction.personal,
+    prediction.health,
+    prediction.profession,
+    prediction.emotions,
+    prediction.travel,
+  ].filter(Boolean).join(" ");
+  
+  return {
+    data: {
+      horoscope_data: horoscopeText || "",
+      date: dateStr,
+      lucky_number: luckyNumber,
+      lucky_color: luckyColor,
+    }
+  };
+}
+
+// Fetch horoscope from fallback API
+async function fetchFromFallbackAPI(sign: string, period: string, day: string = "TODAY") {
   let url = "";
 
   switch (period) {
     case "weekly":
-      endpoint = "/get-horoscope/weekly";
-      url = `${HOROSCOPE_API_BASE}${endpoint}?sign=${sign}`;
+      url = `${FALLBACK_API_BASE}/get-horoscope/weekly?sign=${sign}`;
       break;
     case "monthly":
-      endpoint = "/get-horoscope/monthly";
-      url = `${HOROSCOPE_API_BASE}${endpoint}?sign=${sign}`;
+      url = `${FALLBACK_API_BASE}/get-horoscope/monthly?sign=${sign}`;
       break;
     case "daily":
     default:
-      endpoint = "/get-horoscope/daily";
-      url = `${HOROSCOPE_API_BASE}${endpoint}?sign=${sign}&day=${day}`;
+      url = `${FALLBACK_API_BASE}/get-horoscope/daily?sign=${sign}&day=${day}`;
       break;
   }
 
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+    throw new Error(`Fallback API request failed: ${response.status}`);
   }
   return response.json();
+}
+
+// Fetch horoscope from external API (tries Divine first, then fallback)
+async function fetchHoroscopeFromAPI(sign: string, period: string, day: string = "TODAY") {
+  // Try Divine API first if configured
+  if (DIVINE_API_KEY) {
+    try {
+      const divineDay = day === "TOMORROW" ? "tomorrow" : "today";
+      return await fetchFromDivineAPI(sign, period, divineDay);
+    } catch (error) {
+      console.error("Divine API failed, using fallback:", error);
+    }
+  }
+
+  // Fallback to free API
+  return await fetchFromFallbackAPI(sign, period, day);
 }
 
 export async function GET(request: NextRequest) {
