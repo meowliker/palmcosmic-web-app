@@ -23,19 +23,7 @@ const subscriptionPlans = [
     name: "Monthly Plan",
     price: "$29.99",
     period: "/month",
-  },
-  {
-    id: "yearly-plan",
-    name: "Yearly Plan",
-    price: "$49.99",
-    period: "/year",
     bestValue: true,
-  },
-  {
-    id: "monthly-v2-plan",
-    name: "Monthly Plan",
-    price: "$49.99",
-    period: "/month",
   },
 ];
 
@@ -46,12 +34,11 @@ const trialToRecurringPlan: Record<string, string> = {
   "4week": "monthly-plan",
   "weekly": "2week-plan",
   "monthly": "monthly-plan",
-  "yearly": "yearly-plan",
-  "Yearly2": "yearly-plan", // New yearly plan
-  // A/B Test Variant B plans - all convert to $49.99/month
-  "1week-v2": "monthly-v2-plan",
-  "4week-v2": "monthly-v2-plan",
-  "12week-v2": "monthly-v2-plan",
+  "yearly": "monthly-plan",
+  "Yearly2": "monthly-plan",
+  "1week-v2": "monthly-plan",
+  "4week-v2": "monthly-plan",
+  "12week-v2": "monthly-plan",
 };
 
 export default function ManageSubscriptionPage() {
@@ -92,8 +79,8 @@ export default function ManageSubscriptionPage() {
     // Direct plan matches
     if (pLower === "2week-plan") return "2week-plan";
     if (pLower === "monthly-plan") return "monthly-plan";
-    if (pLower === "yearly-plan") return "yearly-plan";
-    if (pLower === "monthly-v2-plan") return "monthly-v2-plan";
+    if (pLower === "yearly-plan") return "monthly-plan";
+    if (pLower === "monthly-v2-plan") return "monthly-plan";
     return null;
   };
 
@@ -223,10 +210,7 @@ export default function ManageSubscriptionPage() {
   // Get the charge amount after trial based on raw plan
   const getAfterTrialCharge = () => {
     const rawPlan = subscriptionStatus.rawPlan;
-    if (rawPlan === "4week") return "$29.99/month";
-    if (rawPlan === "Yearly2" || rawPlan === "yearly") return "$49.99/year";
-    // A/B Test Variant B plans - all convert to $49.99/month
-    if (rawPlan === "1week-v2" || rawPlan === "4week-v2" || rawPlan === "12week-v2") return "$49.99/month";
+    if (rawPlan === "4week" || rawPlan === "monthly") return "$29.99/month";
     return "$19.99/2 weeks";
   };
 
@@ -419,7 +403,7 @@ export default function ManageSubscriptionPage() {
                   <div>
                     <p className="text-white/60 text-sm">Current Plan</p>
                     <p className="text-primary text-lg font-bold">
-                      {activePlan === "2week-plan" ? "2-Week Plan" : activePlan === "yearly-plan" ? "Yearly Plan" : "Monthly Plan"}
+                      {activePlan === "2week-plan" ? "2-Week Plan" : "Monthly Plan"}
                     </p>
                   </div>
                 </div>

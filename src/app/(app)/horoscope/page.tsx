@@ -57,22 +57,48 @@ export default function HoroscopePage() {
 
   const loadUserSign = async () => {
     try {
+      const extractSignName = (sign: any): string | null => {
+        if (!sign) return null;
+        if (typeof sign === "string") return sign;
+        if (sign.name) return sign.name;
+        return null;
+      };
+
       // Get userId - prefer Firebase Auth uid
       const authUid = auth.currentUser?.uid;
       const storedId = localStorage.getItem("palmcosmic_user_id");
       const userId = authUid || storedId;
 
       if (userId) {
-        // Load birth date from Firebase
+        // Try to get astro-engine sun sign from users/{userId}
         const userRef = doc(db, "users", userId);
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
           const data = userSnap.data();
+          const storedSunSign = extractSignName(data.sunSign);
+          if (storedSunSign) {
+            setSelectedSign(storedSunSign);
+            return;
+          }
+
+          // Fallback: check user_profiles/{userId} for astro-engine signs
+          try {
+            const profileSnap = await getDoc(doc(db, "user_profiles", userId));
+            if (profileSnap.exists()) {
+              const profileSunSign = extractSignName(profileSnap.data().sunSign);
+              if (profileSunSign) {
+                setSelectedSign(profileSunSign);
+                return;
+              }
+            }
+          } catch (profileErr) {
+            console.error("Error reading user_profiles:", profileErr);
+          }
+
+          // Last resort: calculate from birth date (Western tropical)
           if (data.birthMonth && data.birthDay) {
-            const month = Number(data.birthMonth);
-            const day = Number(data.birthDay);
-            const sign = getZodiacSign(month, day);
+            const sign = getZodiacSign(Number(data.birthMonth), Number(data.birthDay));
             setSelectedSign(sign);
             return;
           }
@@ -80,10 +106,11 @@ export default function HoroscopePage() {
       }
 
       // Fallback to onboarding store
-      if (storeBirthMonth && storeBirthDay) {
-        const month = Number(storeBirthMonth);
-        const day = Number(storeBirthDay);
-        const sign = getZodiacSign(month, day);
+      const onboardingSunSign = useOnboardingStore.getState().sunSign;
+      if (onboardingSunSign?.name) {
+        setSelectedSign(onboardingSunSign.name);
+      } else if (storeBirthMonth && storeBirthDay) {
+        const sign = getZodiacSign(Number(storeBirthMonth), Number(storeBirthDay));
         setSelectedSign(sign);
       }
     } catch (error) {

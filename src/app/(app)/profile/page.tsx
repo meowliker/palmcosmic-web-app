@@ -113,14 +113,38 @@ export default function ProfilePage() {
             return null;
           };
 
-          // Calculate sun sign from birth date if not stored
-          const calculatedSunSign = month && day ? getZodiacSign(Number(month), Number(day)) : "Aries";
-          
+          let sunSignValue = extractSignName(data.sunSign);
           let moonSignValue = extractSignName(data.moonSign);
           let ascendantValue = extractSignName(data.ascendantSign);
           
-          // If moon or ascendant signs are missing, fetch them from API and save to Firebase
-          if (!moonSignValue || !ascendantValue) {
+          // If signs are missing from users/{userId}, check user_profiles/{userId}
+          // (onboarding saves astro-engine signs there via saveUserProfile)
+          if (!sunSignValue || !moonSignValue || !ascendantValue) {
+            try {
+              const profileRef = doc(db, "user_profiles", userId);
+              const profileSnap = await getDoc(profileRef);
+              if (profileSnap.exists()) {
+                const profileData = profileSnap.data();
+                if (!sunSignValue) sunSignValue = extractSignName(profileData.sunSign);
+                if (!moonSignValue) moonSignValue = extractSignName(profileData.moonSign);
+                if (!ascendantValue) ascendantValue = extractSignName(profileData.ascendantSign);
+                
+                // Save signs back to users/{userId} for future reads
+                if (sunSignValue || moonSignValue || ascendantValue) {
+                  await setDoc(userRef, {
+                    ...(sunSignValue ? { sunSign: profileData.sunSign } : {}),
+                    ...(moonSignValue ? { moonSign: profileData.moonSign } : {}),
+                    ...(ascendantValue ? { ascendantSign: profileData.ascendantSign } : {}),
+                  }, { merge: true });
+                }
+              }
+            } catch (profileError) {
+              console.error("Error reading user_profiles:", profileError);
+            }
+          }
+          
+          // If signs are still missing, fetch from astro-engine API
+          if (!sunSignValue || !moonSignValue || !ascendantValue) {
             try {
               const response = await fetch("/api/astrology/signs", {
                 method: "POST",
@@ -137,8 +161,9 @@ export default function ProfilePage() {
               });
               const signsData = await response.json();
               if (signsData.success) {
-                moonSignValue = extractSignName(signsData.moonSign) || "Cancer";
-                ascendantValue = extractSignName(signsData.ascendant) || "Leo";
+                if (!sunSignValue) sunSignValue = extractSignName(signsData.sunSign);
+                if (!moonSignValue) moonSignValue = extractSignName(signsData.moonSign);
+                if (!ascendantValue) ascendantValue = extractSignName(signsData.ascendant);
                 
                 // Save signs to Firebase for future use
                 await setDoc(userRef, {
@@ -157,6 +182,9 @@ export default function ProfilePage() {
           // Get email from Firebase or localStorage
           const email = data.email || localStorage.getItem("palmcosmic_email") || undefined;
           
+          // Final fallback: use Western tropical calculation only if astro-engine signs unavailable
+          const fallbackSunSign = month && day ? getZodiacSign(Number(month), Number(day)) : "Aries";
+
           setUserData({
             birthMonth: month,
             birthDay: day,
@@ -164,7 +192,7 @@ export default function ProfilePage() {
             birthHour: hour,
             birthMinute: minute,
             birthPeriod: period,
-            sunSign: extractSignName(data.sunSign) || calculatedSunSign,
+            sunSign: sunSignValue || fallbackSunSign,
             moonSign: moonSignValue || "Cancer",
             ascendantSign: ascendantValue || "Leo",
             name: data.name || undefined,

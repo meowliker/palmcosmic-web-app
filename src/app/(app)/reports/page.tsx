@@ -107,15 +107,39 @@ export default function DashboardPage() {
             setBirthChartTimerStartedAt(data.birthChartTimerStartedAt);
           }
           
-          // Calculate sun sign from birth date - this is the ONLY source of truth
-          if (data.birthMonth && data.birthDay) {
-            const month = Number(data.birthMonth);
-            const day = Number(data.birthDay);
-            const sign = getZodiacSign(month, day);
+          // Helper to extract sign name from string or object
+          const extractSignName = (sign: any): string | null => {
+            if (!sign) return null;
+            if (typeof sign === "string") return sign;
+            if (sign.name) return sign.name;
+            return null;
+          };
+
+          // Use astro-engine sun sign from Firestore as source of truth
+          let sunSignName = extractSignName(data.sunSign);
+
+          // Fallback: check user_profiles/{userId} for astro-engine signs
+          if (!sunSignName && userId) {
+            try {
+              const profileSnap = await getDoc(doc(db, "user_profiles", userId));
+              if (profileSnap.exists()) {
+                sunSignName = extractSignName(profileSnap.data().sunSign);
+              }
+            } catch (profileErr) {
+              console.error("Error reading user_profiles:", profileErr);
+            }
+          }
+
+          // Last resort: calculate from birth date (Western tropical)
+          if (!sunSignName && data.birthMonth && data.birthDay) {
+            sunSignName = getZodiacSign(Number(data.birthMonth), Number(data.birthDay));
+          }
+
+          if (sunSignName) {
             setUserZodiac({
-              sign,
-              symbol: getZodiacSymbol(sign),
-              color: getZodiacColor(sign),
+              sign: sunSignName,
+              symbol: getZodiacSymbol(sunSignName),
+              color: getZodiacColor(sunSignName),
             });
             
             // Also try to get email from localStorage as fallback
