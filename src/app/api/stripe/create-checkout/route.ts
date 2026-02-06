@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       sessionParams = {
         mode: "subscription",
         payment_method_types: ["card"],
+        allow_promotion_codes: true,
         line_items: [
           {
             price: subscriptionPriceId,
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest) {
       sessionParams = {
         mode: "payment",
         payment_method_types: ["card"],
+        allow_promotion_codes: true,
         line_items: [
           {
             // One-time trial fee (charged immediately)
