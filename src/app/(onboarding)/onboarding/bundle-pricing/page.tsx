@@ -201,6 +201,20 @@ export default function BundlePricingPage() {
     // Track AddToCart
     pixelEvents.addToCart(plan.priceValue, plan.name);
 
+    // Track Brevo checkout_started for abandoned checkout automation (30-min email)
+    const userEmail = localStorage.getItem("palmcosmic_email");
+    if (userEmail) {
+      fetch("/api/track-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: userEmail,
+          event: "checkout_started",
+          properties: { plan: selectedPlan, price: plan.priceValue, flow: "bundle" },
+        }),
+      }).catch(() => {});
+    }
+
     try {
       const response = await fetch("/api/stripe/create-bundle-checkout", {
         method: "POST",

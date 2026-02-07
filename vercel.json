@@ -6,6 +6,10 @@
     {
       "path": "/api/admin/sync-sheets",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/daily-horoscope-email",
+      "schedule": "30 2 * * *"
     }
   ]
 }

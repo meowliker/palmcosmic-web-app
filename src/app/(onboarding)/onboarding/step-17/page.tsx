@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Shield } from "lucide-react";
 import Link from "next/link";
 import { generateUserId } from "@/lib/user-profile";
@@ -139,6 +139,7 @@ const pricingPlans = [
 
 export default function Step17Page() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<string>("2week");
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [paymentError, setPaymentError] = useState("");
@@ -151,10 +152,11 @@ export default function Step17Page() {
   const [readingStats, setReadingStats] = useState<Array<{label: string; color: string; value: number}>>([]);
   const [compatibilityStats, setCompatibilityStats] = useState<Array<{label: string; color: string; value: number}>>([]);
   const checkoutStartedRef = useRef(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(false);
   
   // Get user data from onboarding store
-  const { gender, birthYear, birthMonth, birthDay, sunSign, moonSign, ascendantSign } = useOnboardingStore();
-  const { firebaseUserId } = useUserStore();
+  const { gender, birthYear, birthMonth, birthDay, sunSign, moonSign, ascendantSign, setGender, setBirthDate, setBirthTime, setBirthPlace, setKnowsBirthTime, setRelationshipStatus, setGoals, setColorPreference, setElementPreference, setSigns } = useOnboardingStore();
+  const { firebaseUserId, setFirebaseUserId } = useUserStore();
   
   // Refs for sticky CTA visibility
   const birthChartSectionRef = useRef<HTMLDivElement>(null);
@@ -183,6 +185,46 @@ export default function Step17Page() {
   useEffect(() => {
     const handlePageShow = () => setIsProcessing(false);
     window.addEventListener("pageshow", handlePageShow);
+
+    // Session restoration: If ?email= param is present and no local user data,
+    // fetch from Firestore so the user can checkout from a different browser/device
+    const emailParam = searchParams.get("email");
+    const hasLocalUser = !!localStorage.getItem("palmcosmic_user_id") || !!localStorage.getItem("palmcosmic_email");
+
+    if (emailParam && !hasLocalUser) {
+      setIsRestoringSession(true);
+      fetch(`/api/user/restore-session?email=${encodeURIComponent(emailParam)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.userId) {
+            // Restore localStorage identifiers
+            localStorage.setItem("palmcosmic_user_id", data.userId);
+            localStorage.setItem("palmcosmic_email", data.email);
+
+            // Restore onboarding store
+            const o = data.onboarding;
+            if (o.gender) setGender(o.gender);
+            if (o.birthMonth) setBirthDate(o.birthMonth, o.birthDay, o.birthYear);
+            if (o.birthHour) setBirthTime(o.birthHour, o.birthMinute, o.birthPeriod);
+            if (o.birthPlace) setBirthPlace(o.birthPlace);
+            if (o.knowsBirthTime !== undefined) setKnowsBirthTime(o.knowsBirthTime);
+            if (o.relationshipStatus) setRelationshipStatus(o.relationshipStatus);
+            if (o.goals?.length) setGoals(o.goals);
+            if (o.colorPreference) setColorPreference(o.colorPreference);
+            if (o.elementPreference) setElementPreference(o.elementPreference);
+            if (o.sunSign && o.moonSign && o.ascendantSign) {
+              setSigns(o.sunSign, o.moonSign, o.ascendantSign);
+            }
+
+            // Restore user store
+            setFirebaseUserId(data.userId);
+
+            console.log("[restore-session] Session restored for:", data.email);
+          }
+        })
+        .catch((err) => console.error("[restore-session] Failed:", err))
+        .finally(() => setIsRestoringSession(false));
+    }
     
     // Route protection: Check if user has already completed payment
     const hasCompletedPayment = localStorage.getItem("palmcosmic_payment_completed") === "true";
@@ -430,6 +472,20 @@ export default function Step17Page() {
         metadata: { plan, price: planPrice },
       }),
     }).catch(() => {});
+
+    // Track Brevo checkout_started for abandoned checkout automation (30-min email)
+    const userEmail = localStorage.getItem("palmcosmic_email");
+    if (userEmail) {
+      fetch("/api/track-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: userEmail,
+          event: "checkout_started",
+          properties: { plan, price: planPrice, variant: "A" },
+        }),
+      }).catch(() => {});
+    }
     
     // Track AddToCart when user clicks "Start Trial"
     pixelEvents.addToCart(planPrice, planName);

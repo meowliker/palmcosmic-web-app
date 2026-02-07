@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase-admin";
+import {
+  trackEvent,
+  upsertContact,
+  addContactToList,
+  removeContactFromList,
+  BREVO_LISTS,
+} from "@/lib/brevo";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -223,6 +230,66 @@ export async function POST(request: NextRequest) {
         }
       } else {
         console.log("Skipping subscription fulfillment for non-subscription session mode:", session.mode, "type:", type);
+      }
+    }
+
+    // ── Brevo: Track checkout_completed & manage lists ──────────────
+    const customerEmail = (
+      session.customer_details?.email ||
+      session.customer_email ||
+      ""
+    ).toLowerCase().trim();
+
+    if (customerEmail) {
+      try {
+        // Read user's sun sign from Firestore for personalized daily emails
+        let sunSign = "Aries";
+        const userData = (await userRef.get()).data();
+        if (userData) {
+          const raw = userData.sunSign;
+          if (typeof raw === "string") sunSign = raw;
+          else if (raw?.name) sunSign = raw.name;
+        }
+
+        // If sun sign still default, check user_profiles collection
+        if (sunSign === "Aries") {
+          try {
+            const profileSnap = await adminDb.collection("user_profiles").doc(resolvedUserId).get();
+            if (profileSnap.exists) {
+              const pData = profileSnap.data();
+              const raw = pData?.sunSign;
+              if (typeof raw === "string") sunSign = raw;
+              else if (raw?.name) sunSign = raw.name;
+            }
+          } catch (_) {}
+        }
+
+        const plan = String(meta.plan || meta.bundleId || type || "").trim();
+
+        // Upsert contact with attributes for personalized emails
+        await upsertContact(customerEmail, {
+          SUN_SIGN: sunSign,
+          PLAN: plan,
+          FIRSTNAME: userData?.name || "",
+        });
+
+        // Remove from abandoned checkout list (they converted!)
+        await removeContactFromList(customerEmail, BREVO_LISTS.ABANDONED_CHECKOUT);
+
+        // Add to active subscribers list for daily horoscope emails
+        await addContactToList(customerEmail, BREVO_LISTS.ACTIVE_SUBSCRIBERS);
+
+        // Fire checkout_completed event (cancels the 30-min abandoned cart automation)
+        await trackEvent(customerEmail, "checkout_completed", {
+          plan,
+          amount: session.amount_total ? session.amount_total / 100 : 0,
+          sunSign,
+        });
+
+        console.log("[Brevo] checkout_completed tracked for:", customerEmail, "sunSign:", sunSign);
+      } catch (brevoErr: any) {
+        // Non-critical: don't fail the fulfillment if Brevo errors
+        console.error("[Brevo] Error in fulfill-checkout:", brevoErr?.message || brevoErr);
       }
     }
 
