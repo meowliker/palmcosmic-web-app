@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");
     const flowFilter = searchParams.get("flow") || "all"; // "all", "flow-a", "flow-b"
+    const startDateParam = searchParams.get("startDate"); // YYYY-MM-DD
+    const endDateParam = searchParams.get("endDate"); // YYYY-MM-DD
     
     if (!token) {
       return NextResponse.json({ error: "Unauthorized - No token provided" }, { status: 401 });
@@ -576,6 +578,41 @@ export async function GET(request: NextRequest) {
       userMap.set(u.id, { email: u.email, name: u.name });
     });
     
+    // Custom date range filtering
+    let customDateRevenue: number | null = null;
+    let customDatePaymentCount: number | null = null;
+    let customDateTransactions: any[] = [];
+    
+    if (startDateParam) {
+      const customStart = new Date(startDateParam + "T00:00:00");
+      const customEnd = endDateParam 
+        ? new Date(endDateParam + "T23:59:59.999") 
+        : new Date(startDateParam + "T23:59:59.999");
+      
+      const customPayments = payments.filter(p => {
+        if (!p.createdAt) return false;
+        const d = new Date(p.createdAt);
+        return d >= customStart && d <= customEnd;
+      });
+      
+      customDateRevenue = customPayments.reduce((sum, p) => sum + getAmount(p), 0);
+      customDatePaymentCount = customPayments.length;
+      customDateTransactions = customPayments.map(p => {
+        const userData = userMap.get(p.userId) || {};
+        return {
+          id: p.id,
+          date: p.createdAt,
+          userId: p.userId,
+          userEmail: (userData as any).email || p.customerEmail || "Unknown",
+          userName: (userData as any).name || "Unknown",
+          amount: getAmount(p),
+          plan: p.plan,
+          type: p.type,
+          status: p.paymentStatus || p.status || "succeeded",
+        };
+      });
+    }
+
     // Recent transactions (last 50) with user email/name
     const recentTransactions = payments.slice(0, 50).map(p => {
       const userData = userMap.get(p.userId) || {};
@@ -686,6 +723,14 @@ export async function GET(request: NextRequest) {
       flowFilter,
       flowBreakdown,
       bundleBreakdown,
+      
+      // Custom date range
+      ...(customDateRevenue !== null && {
+        customDateRevenue: customDateRevenue.toFixed(2),
+        customDatePaymentCount,
+        customDateTransactions,
+        customDateRange: { start: startDateParam, end: endDateParam || startDateParam },
+      }),
     });
   } catch (error: any) {
     console.error("Admin revenue API error:", error);
