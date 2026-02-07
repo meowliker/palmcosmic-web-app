@@ -613,8 +613,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Recent transactions (last 50) with user email/name
-    const recentTransactions = payments.slice(0, 50).map(p => {
+    // All transactions with user email/name (needed for client-side date filtering)
+    const recentTransactions = payments.map(p => {
       const userData = userMap.get(p.userId) || {};
       return {
         id: p.id,

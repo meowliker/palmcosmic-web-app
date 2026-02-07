@@ -143,10 +143,11 @@ export default function AdminRevenuePage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDateRange, setFilterDateRange] = useState<string>("all");
   
-  // Custom date range
-  const [customStartDate, setCustomStartDate] = useState<string>("");
-  const [customEndDate, setCustomEndDate] = useState<string>("");
-  const [customDateApplied, setCustomDateApplied] = useState(false);
+  // Date picker for revenue lookup (defaults to today)
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [dateLoading, setDateLoading] = useState(false);
   
   // Sorting
   const [sortField, setSortField] = useState<string>("date");
@@ -191,6 +192,7 @@ export default function AdminRevenuePage() {
   const fetchData = async () => {
     try {
       setRefreshing(true);
+      setDateLoading(true);
       
       // Check for admin session token
       const token = localStorage.getItem("admin_session_token");
@@ -205,9 +207,8 @@ export default function AdminRevenuePage() {
       }
       
       let url = `/api/admin/revenue?token=${token}&flow=${flowTab}`;
-      if (customDateApplied && customStartDate) {
-        url += `&startDate=${customStartDate}`;
-        if (customEndDate) url += `&endDate=${customEndDate}`;
+      if (selectedDate) {
+        url += `&startDate=${selectedDate}&endDate=${selectedDate}`;
       }
       const response = await fetch(url);
       
@@ -232,12 +233,13 @@ export default function AdminRevenuePage() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setDateLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
-  }, [router, flowTab, customDateApplied]); // Re-fetch when flow tab or custom date changes
+  }, [router, flowTab, selectedDate]); // Re-fetch when flow tab or selected date changes
 
   if (loading) {
     return (
@@ -406,13 +408,21 @@ export default function AdminRevenuePage() {
     setFilterPlan("all");
     setFilterStatus("all");
     setFilterDateRange("all");
-    setCustomStartDate("");
-    setCustomEndDate("");
-    setCustomDateApplied(false);
   };
 
-  const hasActiveFilters = filterType !== "all" || filterPlan !== "all" || filterStatus !== "all" || filterDateRange !== "all" || customDateApplied;
+  const hasActiveFilters = filterType !== "all" || filterPlan !== "all" || filterStatus !== "all" || filterDateRange !== "all";
   const filteredTransactions = getFilteredTransactions();
+
+  // Server-side filtered revenue for selected date
+  const selectedDateRevenue = data.customDateRevenue ? parseFloat(data.customDateRevenue) : 0;
+  const selectedDateTransactions = data.customDateTransactions || [];
+  const selectedDatePaymentCount = data.customDatePaymentCount || 0;
+  
+  // Format date as "06 February 2026"
+  const formatSelectedDate = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+  };
 
   const maxRevenue = Math.max(...data.revenueOverTime.map(d => d.revenue), 1);
 
@@ -527,49 +537,6 @@ export default function AdminRevenuePage() {
                   <option value="month">Last 30 Days</option>
                   <option value="year">Last Year</option>
                 </select>
-              </div>
-              
-              {/* Custom Date Range */}
-              <div className="col-span-2 md:col-span-4">
-                <label className="text-white/50 text-xs mb-2 block">Custom Date Range (Revenue Lookup)</label>
-                <div className="flex flex-wrap items-center gap-3">
-                  <input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary/50 [color-scheme:dark]"
-                  />
-                  <span className="text-white/40 text-sm">to</span>
-                  <input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary/50 [color-scheme:dark]"
-                  />
-                  <button
-                    onClick={() => {
-                      if (customStartDate) {
-                        setCustomDateApplied(true);
-                      }
-                    }}
-                    disabled={!customStartDate}
-                    className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Apply
-                  </button>
-                  {customDateApplied && (
-                    <button
-                      onClick={() => {
-                        setCustomStartDate("");
-                        setCustomEndDate("");
-                        setCustomDateApplied(false);
-                      }}
-                      className="px-3 py-2 rounded-lg text-sm text-red-400 bg-red-500/20 hover:bg-red-500/30 transition-colors"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
               </div>
               
               {/* Type Filter */}
@@ -711,106 +678,99 @@ export default function AdminRevenuePage() {
 
         {/* Revenue by Period */}
         <section>
-          <h2 className="text-white/70 text-sm font-medium mb-3 flex items-center gap-2">
-            <Calendar className="w-4 h-4" /> Revenue by Period
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-white/70 text-sm font-medium flex items-center gap-2">
+              <Calendar className="w-4 h-4" /> Revenue by Period
+            </h2>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-primary/50 [color-scheme:dark]"
+              />
+              {selectedDate !== new Date().toISOString().split("T")[0] && (
+                <button
+                  onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+                  className="px-3 py-1.5 rounded-lg text-xs text-white/60 bg-white/10 hover:bg-white/20 transition-colors"
+                >
+                  Today
+                </button>
+              )}
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricCard title="Today" value={formatCurrency(data.revenueToday)} tooltip="Revenue generated today from all payment types." />
+            <div className="bg-[#1A2235] rounded-xl p-4 border border-white/10 relative">
+              {dateLoading && (
+                <div className="absolute inset-0 bg-[#1A2235]/80 rounded-xl flex items-center justify-center z-10">
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                </div>
+              )}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white/50 text-xs">{selectedDate === new Date().toISOString().split("T")[0] ? "Today" : formatSelectedDate(selectedDate)}</span>
+                  <Tooltip content="Revenue for the selected date." />
+                </div>
+                <span className="text-green-400"><DollarSign className="w-4 h-4" /></span>
+              </div>
+              <p className="text-xl font-bold text-green-400">{formatCurrency(selectedDateRevenue)}</p>
+              <p className="text-white/40 text-xs mt-1">{selectedDatePaymentCount} payments</p>
+            </div>
             <MetricCard title="This Week" value={formatCurrency(data.revenueThisWeek)} tooltip="Revenue generated this week (Sunday to today)." />
             <MetricCard title="This Month" value={formatCurrency(data.revenueThisMonth)} tooltip="Revenue generated this month (1st to today)." />
             <MetricCard title="This Year" value={formatCurrency(data.revenueThisYear)} tooltip="Revenue generated this year (Jan 1st to today)." />
           </div>
-        </section>
-
-        {/* Custom Date Range Results */}
-        {customDateApplied && data.customDateRevenue !== undefined && (
-          <section>
-            <h2 className="text-white/70 text-sm font-medium mb-3 flex items-center gap-2">
-              <Calendar className="w-4 h-4" /> Revenue for {data.customDateRange?.start === data.customDateRange?.end 
-                ? data.customDateRange?.start 
-                : `${data.customDateRange?.start} to ${data.customDateRange?.end}`}
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-              <KPICard
-                title="Revenue"
-                value={formatCurrency(data.customDateRevenue)}
-                icon={<DollarSign className="w-4 h-4" />}
-                color="text-green-400"
-              />
-              <KPICard
-                title="Payments"
-                value={(data.customDatePaymentCount || 0).toString()}
-                icon={<CreditCard className="w-4 h-4" />}
-                color="text-blue-400"
-              />
-              <KPICard
-                title="Avg per Payment"
-                value={formatCurrency(
-                  data.customDatePaymentCount && data.customDatePaymentCount > 0
-                    ? parseFloat(data.customDateRevenue) / data.customDatePaymentCount
-                    : 0
-                )}
-                icon={<Activity className="w-4 h-4" />}
-                color="text-purple-400"
-              />
+          
+          {/* Transactions for selected date */}
+          {dateLoading && (
+            <div className="mt-4 bg-[#1A2235] rounded-xl p-6 border border-white/10 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 text-primary animate-spin" />
+              <p className="text-white/40 text-sm">Loading transactions...</p>
             </div>
-            
-            {/* Custom Date Transactions Table */}
-            {data.customDateTransactions && data.customDateTransactions.length > 0 && (
-              <div className="bg-[#1A2235] rounded-xl border border-white/10 overflow-hidden">
-                <div className="overflow-x-auto max-h-80 overflow-y-auto">
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-[#1A2235]">
-                      <tr className="border-b border-white/10">
-                        <th className="text-left text-white/50 text-xs font-medium px-4 py-3">Date</th>
-                        <th className="text-left text-white/50 text-xs font-medium px-4 py-3">User</th>
-                        <th className="text-left text-white/50 text-xs font-medium px-4 py-3">Type</th>
-                        <th className="text-left text-white/50 text-xs font-medium px-4 py-3">Plan</th>
-                        <th className="text-right text-white/50 text-xs font-medium px-4 py-3">Amount</th>
-                        <th className="text-center text-white/50 text-xs font-medium px-4 py-3">Status</th>
+          )}
+          {!dateLoading && selectedDateTransactions.length > 0 && (
+            <div className="mt-4 bg-[#1A2235] rounded-xl border border-white/10 overflow-hidden">
+              <div className="px-4 py-3 border-b border-white/10">
+                <p className="text-white/60 text-xs">
+                  {selectedDatePaymentCount} transaction{selectedDatePaymentCount !== 1 ? "s" : ""} on {formatSelectedDate(selectedDate)}
+                </p>
+              </div>
+              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-[#1A2235]">
+                    <tr className="border-b border-white/10">
+                      <th className="text-left text-white/50 text-xs font-medium px-4 py-2">Time</th>
+                      <th className="text-left text-white/50 text-xs font-medium px-4 py-2">User</th>
+                      <th className="text-left text-white/50 text-xs font-medium px-4 py-2">Type</th>
+                      <th className="text-left text-white/50 text-xs font-medium px-4 py-2">Plan</th>
+                      <th className="text-right text-white/50 text-xs font-medium px-4 py-2">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDateTransactions.map((tx) => (
+                      <tr key={tx.id} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="text-white/70 text-sm px-4 py-2">{formatDate(tx.date)}</td>
+                        <td className="px-4 py-2">
+                          <p className="text-white/80 text-sm">{tx.userName !== "Unknown" ? tx.userName : tx.userEmail?.split("@")[0] || "Unknown"}</p>
+                          <p className="text-white/40 text-xs">{tx.userEmail}</p>
+                        </td>
+                        <td className="text-white/70 text-sm px-4 py-2 capitalize">{tx.type || "subscription"}</td>
+                        <td className="text-white/70 text-sm px-4 py-2 capitalize">{tx.plan || "-"}</td>
+                        <td className="text-white text-sm px-4 py-2 text-right font-medium">{formatCurrency(tx.amount || 0)}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {data.customDateTransactions.map((tx) => (
-                        <tr key={tx.id} className="border-b border-white/5 hover:bg-white/5">
-                          <td className="text-white/70 text-sm px-4 py-3">{formatDate(tx.date)}</td>
-                          <td className="px-4 py-3">
-                            <div>
-                              <p className="text-white/80 text-sm">{tx.userName !== "Unknown" ? tx.userName : tx.userEmail?.split("@")[0] || "Unknown"}</p>
-                              <p className="text-white/40 text-xs">{tx.userEmail}</p>
-                            </div>
-                          </td>
-                          <td className="text-white/70 text-sm px-4 py-3 capitalize">{tx.type || "subscription"}</td>
-                          <td className="text-white/70 text-sm px-4 py-3 capitalize">{tx.plan || "-"}</td>
-                          <td className="text-white text-sm px-4 py-3 text-right font-medium">{formatCurrency(tx.amount || 0)}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
-                              tx.status === "succeeded" || tx.status === "paid" ? "bg-green-500/20 text-green-400" :
-                              tx.status === "failed" ? "bg-red-500/20 text-red-400" :
-                              tx.status === "refunded" ? "bg-amber-500/20 text-amber-400" :
-                              "bg-gray-500/20 text-gray-400"
-                            }`}>
-                              {(tx.status === "succeeded" || tx.status === "paid") && <CheckCircle className="w-3 h-3" />}
-                              {tx.status === "failed" && <XCircle className="w-3 h-3" />}
-                              {tx.status === "refunded" && <RefreshCw className="w-3 h-3" />}
-                              {tx.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-            
-            {data.customDateTransactions && data.customDateTransactions.length === 0 && (
-              <div className="bg-[#1A2235] rounded-xl p-6 border border-white/10 text-center">
-                <p className="text-white/40 text-sm">No transactions found for this date range</p>
-              </div>
-            )}
-          </section>
-        )}
+            </div>
+          )}
+          
+          {!dateLoading && selectedDateTransactions.length === 0 && selectedDate && (
+            <div className="mt-4 bg-[#1A2235] rounded-xl p-4 border border-white/10 text-center">
+              <p className="text-white/40 text-sm">No transactions on {formatSelectedDate(selectedDate)}</p>
+            </div>
+          )}
+        </section>
 
         {/* Subscription Breakdown */}
         <section>
