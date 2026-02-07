@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { sendTemplateEmail, BREVO_TEMPLATES } from "@/lib/brevo";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/cron/daily-horoscope-email
  *
