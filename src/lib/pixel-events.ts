@@ -8,24 +8,43 @@ declare global {
 }
 
 /**
- * Track a custom event with Meta Pixel
+ * Track a standard event with Meta Pixel.
+ * Retries up to 10 times (500ms apart) if fbq isn't loaded yet,
+ * which commonly happens after returning from Stripe checkout.
  */
 export const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
-  if (typeof window !== "undefined" && window.fbq) {
-    console.log(`[Meta Pixel] Tracking: ${eventName}`, params);
-    window.fbq("track", eventName, params);
-  } else {
-    console.warn(`[Meta Pixel] fbq not available for event: ${eventName}`);
-  }
+  if (typeof window === "undefined") return;
+
+  const fire = (attempt: number) => {
+    if (window.fbq) {
+      console.log(`[Meta Pixel] Tracking: ${eventName}`, params);
+      window.fbq("track", eventName, params);
+    } else if (attempt < 10) {
+      console.log(`[Meta Pixel] fbq not ready, retrying ${eventName} (${attempt + 1}/10)...`);
+      setTimeout(() => fire(attempt + 1), 500);
+    } else {
+      console.warn(`[Meta Pixel] fbq never loaded, dropped event: ${eventName}`);
+    }
+  };
+
+  fire(0);
 };
 
 /**
  * Track a custom event (for events not in Meta's standard list)
  */
 export const trackCustomEvent = (eventName: string, params?: Record<string, any>) => {
-  if (typeof window !== "undefined" && window.fbq) {
-    window.fbq("trackCustom", eventName, params);
-  }
+  if (typeof window === "undefined") return;
+
+  const fire = (attempt: number) => {
+    if (window.fbq) {
+      window.fbq("trackCustom", eventName, params);
+    } else if (attempt < 5) {
+      setTimeout(() => fire(attempt + 1), 500);
+    }
+  };
+
+  fire(0);
 };
 
 // ============================================

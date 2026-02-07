@@ -266,7 +266,8 @@ export async function POST(request: NextRequest) {
               // Create subscription with trial period
               const trialEnd = Math.floor(Date.now() / 1000) + (parseInt(trialDays || "7", 10) * 24 * 60 * 60);
               
-              const subscription = await stripe.subscriptions.create({
+              // Build subscription params
+              const subParams: Stripe.SubscriptionCreateParams = {
                 customer: customerId,
                 items: [{ price: subscriptionPriceId }],
                 trial_end: trialEnd,
@@ -275,7 +276,27 @@ export async function POST(request: NextRequest) {
                   plan: plan || "",
                   abVariant: abVariant || "A",
                 },
-              });
+              };
+
+              // If user applied a promo code at checkout, carry it to the subscription
+              // so the discount applies to the first recurring billing after trial
+              try {
+                const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+                  expand: ["total_details.breakdown"],
+                });
+                const discounts = fullSession.total_details?.breakdown?.discounts;
+                if (discounts && discounts.length > 0) {
+                  const couponId = discounts[0].discount.coupon.id;
+                  if (couponId) {
+                    subParams.coupon = couponId;
+                    console.log("Carrying over coupon from checkout to subscription:", couponId);
+                  }
+                }
+              } catch (couponErr) {
+                console.error("Failed to retrieve checkout discount:", couponErr);
+              }
+
+              const subscription = await stripe.subscriptions.create(subParams);
               
               // Update user with subscription info
               const coinsToAdd = getPlanCoins(plan || null);
