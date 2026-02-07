@@ -180,8 +180,12 @@ function Step19Content() {
 
       // Now create/update the user document with migrated data
       // Only set defaults if no migrated data exists
+      // Auto-detect user's timezone for personalized email delivery
+      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+
       const userData: Record<string, any> = {
         email: email.toLowerCase(),
+        timezone: userTimezone,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

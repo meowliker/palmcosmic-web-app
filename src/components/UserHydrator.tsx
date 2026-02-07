@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
 import { useUserStore } from "@/lib/user-store";
@@ -81,6 +81,16 @@ export default function UserHydrator() {
       } else {
         // Clear the cancelled cookie if subscription is active
         document.cookie = "pc_sub_cancelled=; path=/; max-age=0";
+      }
+
+      // Backfill timezone for existing users who don't have it set
+      if (!data.timezone) {
+        try {
+          const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (detectedTz) {
+            await updateDoc(doc(db, "users", userId), { timezone: detectedTz });
+          }
+        } catch (_) {}
       }
 
       if (Object.prototype.hasOwnProperty.call(data, "subscriptionPlan")) {
