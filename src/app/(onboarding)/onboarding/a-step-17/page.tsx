@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { Suspense, useEffect, useState, useRef, useMemo } from "react";
 import { fadeUp } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -132,6 +132,14 @@ const pricingPlans = [
 ];
 
 export default function AStep17Page() {
+  return (
+    <Suspense fallback={null}>
+      <AStep17Content />
+    </Suspense>
+  );
+}
+
+function AStep17Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<string>("4week-v2");
