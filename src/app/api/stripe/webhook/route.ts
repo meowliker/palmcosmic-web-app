@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { headers } from "next/headers";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { addContactToList, removeContactFromList, BREVO_LISTS } from "@/lib/brevo";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -413,6 +414,17 @@ export async function POST(request: NextRequest) {
                 }
               }
               
+              // Add to Brevo Active Subscribers list & remove from Abandoned Checkout
+              if (customerEmail) {
+                try {
+                  await addContactToList(customerEmail, BREVO_LISTS.ACTIVE_SUBSCRIBERS);
+                  await removeContactFromList(customerEmail, BREVO_LISTS.ABANDONED_CHECKOUT);
+                  console.log("Added to Active Subscribers list:", customerEmail);
+                } catch (brevoErr) {
+                  console.error("Failed to update Brevo lists:", brevoErr);
+                }
+              }
+              
               console.log("Subscription created successfully:", subscription.id);
             } catch (subErr) {
               console.error("Failed to create subscription after trial payment:", subErr);
@@ -481,6 +493,16 @@ export async function POST(request: NextRequest) {
                   console.error("Failed to update lead subscription status:", leadErr);
                 }
               }
+              // Add to Brevo Active Subscribers list & remove from Abandoned Checkout
+              if (customerEmail) {
+                try {
+                  await addContactToList(customerEmail, BREVO_LISTS.ACTIVE_SUBSCRIBERS);
+                  await removeContactFromList(customerEmail, BREVO_LISTS.ABANDONED_CHECKOUT);
+                  console.log("Added to Active Subscribers list:", customerEmail);
+                } catch (brevoErr) {
+                  console.error("Failed to update Brevo lists:", brevoErr);
+                }
+              }
             } catch (subErr) {
               console.error("Failed to retrieve subscription:", subErr);
             }
@@ -534,6 +556,17 @@ export async function POST(request: NextRequest) {
                 { merge: true }
               );
             }
+            
+            // Add to Brevo Active Subscribers list & remove from Abandoned Checkout
+            if (customerEmail) {
+              try {
+                await addContactToList(customerEmail, BREVO_LISTS.ACTIVE_SUBSCRIBERS);
+                await removeContactFromList(customerEmail, BREVO_LISTS.ABANDONED_CHECKOUT);
+                console.log("Added to Active Subscribers list:", customerEmail);
+              } catch (brevoErr) {
+                console.error("Failed to update Brevo lists:", brevoErr);
+              }
+            }
           } else {
             console.log("Skipping subscription handling for non-subscription session mode:", session.mode, "type:", type);
           }
@@ -554,21 +587,28 @@ export async function POST(request: NextRequest) {
         
         console.log("Subscription updated:", subscription.id, subData.status);
         
-        // If userId is missing, try to find by customer email
-        if (!userId && subscription.customer) {
+        // Resolve customer email for Brevo list management
+        let subCustomerEmail = "";
+        if (subscription.customer) {
           try {
             const customer = await stripe.customers.retrieve(subscription.customer as string);
             if (customer && !customer.deleted && (customer as any).email) {
-              const email = (customer as any).email.toLowerCase();
-              const userQuery = await adminDb
-                .collection("users")
-                .where("email", "==", email)
-                .limit(1)
-                .get();
-              if (!userQuery.empty) {
-                userId = userQuery.docs[0].id;
-                console.log("Found user by email for subscription update:", userId);
-              }
+              subCustomerEmail = (customer as any).email.toLowerCase();
+            }
+          } catch (_) {}
+        }
+        
+        // If userId is missing, try to find by customer email
+        if (!userId && subCustomerEmail) {
+          try {
+            const userQuery = await adminDb
+              .collection("users")
+              .where("email", "==", subCustomerEmail)
+              .limit(1)
+              .get();
+            if (!userQuery.empty) {
+              userId = userQuery.docs[0].id;
+              console.log("Found user by email for subscription update:", userId);
             }
           } catch (lookupErr) {
             console.error("Email lookup failed for subscription update:", lookupErr);
@@ -610,11 +650,21 @@ export async function POST(request: NextRequest) {
             updatedAt: now,
           };
           
-          // If status is canceled, also set cancellation flags
+          // If status is canceled, also set cancellation flags and remove from Brevo Active Subscribers
           if (subData.status === "canceled") {
             updateData.subscriptionCancelled = true;
             updateData.subscriptionEndedAt = now;
             updateData.isSubscribed = false;
+            
+            // Remove from Active Subscribers so they stop getting daily emails
+            if (subCustomerEmail) {
+              try {
+                await removeContactFromList(subCustomerEmail, BREVO_LISTS.ACTIVE_SUBSCRIBERS);
+                console.log("Removed from Active Subscribers (subscription updated to canceled):", subCustomerEmail);
+              } catch (brevoErr) {
+                console.error("Failed to remove from Brevo Active Subscribers:", brevoErr);
+              }
+            }
           }
           
           await adminDb
@@ -650,6 +700,20 @@ export async function POST(request: NextRequest) {
             }
           } catch (lookupErr) {
             console.error("Email lookup failed for subscription deleted:", lookupErr);
+          }
+        }
+        
+        // Remove from Brevo Active Subscribers so they stop getting daily emails
+        if (subscription.customer) {
+          try {
+            const customer = await stripe.customers.retrieve(subscription.customer as string);
+            if (customer && !customer.deleted && (customer as any).email) {
+              const cancelledEmail = (customer as any).email.toLowerCase();
+              await removeContactFromList(cancelledEmail, BREVO_LISTS.ACTIVE_SUBSCRIBERS);
+              console.log("Removed from Active Subscribers (subscription deleted):", cancelledEmail);
+            }
+          } catch (brevoErr) {
+            console.error("Failed to remove from Brevo Active Subscribers:", brevoErr);
           }
         }
         
