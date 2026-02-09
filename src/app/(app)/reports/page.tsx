@@ -23,14 +23,17 @@ interface DailyData {
 }
 
 interface DailyInsights {
-  dailyTip: string;
+  daily_tip: string;
   dos: string[];
   donts: string[];
-  luckyTime: string;
-  luckyNumber: number;
-  luckyColor: string;
+  lucky_time: string;
+  lucky_number: number;
+  lucky_color: string;
   mood: string;
-  compatibility: string | null;
+  sun_sign?: string;
+  moon_sign?: string;
+  rising_sign?: string;
+  current_dasha?: string;
 }
 
 export default function DashboardPage() {
@@ -49,6 +52,7 @@ export default function DashboardPage() {
   const [birthChartTimerExpired, setBirthChartTimerExpired] = useState(false);
   const [dailyInsights, setDailyInsights] = useState<DailyInsights | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
   // Get sun sign from onboarding store as fallback
   const { birthMonth: storeBirthMonth, birthDay: storeBirthDay, sunSign: storeSunSign } = useOnboardingStore();
@@ -61,12 +65,9 @@ export default function DashboardPage() {
     fetchDailyData();
   }, []);
 
-  // TODO: Re-enable daily insights later
-  // useEffect(() => {
-  //   if (userZodiac.sign) {
-  //     fetchDailyInsights();
-  //   }
-  // }, [userZodiac.sign]);
+  useEffect(() => {
+    fetchDailyInsightsV2();
+  }, []);
 
   const loadUserZodiac = async () => {
     try {
@@ -209,14 +210,18 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchDailyInsights = async () => {
+  const fetchDailyInsightsV2 = async () => {
     try {
       setInsightsLoading(true);
-      const response = await fetch(`/api/horoscope/daily-insights?sign=${userZodiac.sign}`);
-      
+      const authUid = auth.currentUser?.uid;
+      const storedId = localStorage.getItem("palmcosmic_user_id");
+      const userId = authUid || storedId;
+      if (!userId) return;
+
+      const response = await fetch(`/api/horoscope/daily-insights-v2?userId=${userId}`);
       if (response.ok) {
         const result = await response.json();
-        if (result.success) {
+        if (result.success && result.data) {
           setDailyInsights(result.data);
         }
       }
@@ -293,106 +298,208 @@ export default function DashboardPage() {
               </div>
             </motion.div>
             
-            {/* TODO: Today's Insights section - hidden for now, will work on later */}
-            
-            {/* Daily Horoscope */}
+            {/* Today's Cosmic Insights - 3 Cards */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-gradient-to-br from-[#1A1F2E] to-[#252D3F] rounded-2xl overflow-hidden border border-white/10 cursor-pointer"
+            >
+              <h2 className="text-white font-semibold text-lg mb-3">Today&apos;s Cosmic Insights</h2>
+              
+              {insightsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-white/30 animate-spin" />
+                </div>
+              ) : dailyInsights ? (
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Today's Luck Card */}
+                  <div
+                    onClick={() => setExpandedCard("luck")}
+                    className="bg-gradient-to-br from-yellow-500/20 to-amber-600/20 rounded-2xl p-4 border border-yellow-500/20 cursor-pointer hover:border-yellow-500/40 transition-all aspect-square flex flex-col items-center justify-center text-center relative overflow-hidden group"
+                  >
+                    <div className="absolute top-2 right-2 opacity-20 group-hover:opacity-40 transition-opacity">
+                      <Star className="w-8 h-8 text-yellow-400" />
+                    </div>
+                    <span className="text-3xl mb-2">🍀</span>
+                    <p className="text-yellow-400 font-bold text-xs">Today&apos;s Luck</p>
+                    <p className="text-yellow-300 text-2xl font-bold mt-1">{dailyInsights.lucky_number}</p>
+                  </div>
+
+                  {/* Do's & Don'ts Card */}
+                  <div
+                    onClick={() => setExpandedCard("dosdonts")}
+                    className="bg-gradient-to-br from-emerald-500/20 to-teal-600/20 rounded-2xl p-4 border border-emerald-500/20 cursor-pointer hover:border-emerald-500/40 transition-all aspect-square flex flex-col items-center justify-center text-center relative overflow-hidden group"
+                  >
+                    <div className="absolute top-2 right-2 opacity-20 group-hover:opacity-40 transition-opacity">
+                      <CheckCircle className="w-8 h-8 text-emerald-400" />
+                    </div>
+                    <span className="text-3xl mb-2">✅</span>
+                    <p className="text-emerald-400 font-bold text-xs">Do&apos;s &amp;</p>
+                    <p className="text-emerald-400 font-bold text-xs">Don&apos;ts</p>
+                  </div>
+
+                  {/* Daily Tip Card */}
+                  <div
+                    onClick={() => setExpandedCard("tip")}
+                    className="bg-gradient-to-br from-purple-500/20 to-violet-600/20 rounded-2xl p-4 border border-purple-500/20 cursor-pointer hover:border-purple-500/40 transition-all aspect-square flex flex-col items-center justify-center text-center relative overflow-hidden group"
+                  >
+                    <div className="absolute top-2 right-2 opacity-20 group-hover:opacity-40 transition-opacity">
+                      <Lightbulb className="w-8 h-8 text-purple-400" />
+                    </div>
+                    <span className="text-3xl mb-2">💡</span>
+                    <p className="text-purple-400 font-bold text-xs">Daily</p>
+                    <p className="text-purple-400 font-bold text-xs">Tip</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-white/30 text-sm text-center py-4">Insights loading...</p>
+              )}
+            </motion.div>
+
+            {/* Expanded Card Modal */}
+            {expandedCard && dailyInsights && (
+              <div
+                className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+                onClick={() => setExpandedCard(null)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="w-full max-w-sm rounded-3xl overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {expandedCard === "luck" && (
+                    <div className="bg-gradient-to-br from-[#1A1F2E] to-[#252D3F] p-6 border border-yellow-500/20">
+                      <div className="flex items-center gap-3 mb-5">
+                        <span className="text-4xl">🍀</span>
+                        <h3 className="text-white text-xl font-bold">Today&apos;s Luck</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-yellow-500/10 rounded-xl p-4 text-center border border-yellow-500/20">
+                          <p className="text-white/40 text-xs mb-1">Lucky Number</p>
+                          <p className="text-yellow-400 text-3xl font-bold">{dailyInsights.lucky_number}</p>
+                        </div>
+                        <div className="bg-emerald-500/10 rounded-xl p-4 text-center border border-emerald-500/20">
+                          <p className="text-white/40 text-xs mb-1">Lucky Color</p>
+                          <p className="text-emerald-400 text-lg font-bold">{dailyInsights.lucky_color}</p>
+                        </div>
+                        <div className="bg-blue-500/10 rounded-xl p-4 text-center border border-blue-500/20">
+                          <p className="text-white/40 text-xs mb-1">Lucky Time</p>
+                          <p className="text-blue-400 text-sm font-bold">{dailyInsights.lucky_time}</p>
+                        </div>
+                        <div className="bg-purple-500/10 rounded-xl p-4 text-center border border-purple-500/20">
+                          <p className="text-white/40 text-xs mb-1">Mood</p>
+                          <p className="text-purple-400 text-lg font-bold">{dailyInsights.mood}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setExpandedCard(null)} className="w-full mt-5 py-3 bg-white/10 rounded-xl text-white/60 text-sm hover:bg-white/20 transition-colors">Close</button>
+                    </div>
+                  )}
+
+                  {expandedCard === "dosdonts" && (
+                    <div className="bg-gradient-to-br from-[#1A1F2E] to-[#252D3F] p-6 border border-emerald-500/20">
+                      <div className="flex items-center gap-3 mb-5">
+                        <span className="text-4xl">✅</span>
+                        <h3 className="text-white text-xl font-bold">Do&apos;s &amp; Don&apos;ts</h3>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/20">
+                          <h4 className="text-emerald-400 font-bold text-sm mb-3 flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" /> Do&apos;s
+                          </h4>
+                          <ul className="space-y-2">
+                            {dailyInsights.dos.map((item, idx) => (
+                              <li key={idx} className="text-white/70 text-sm flex items-start gap-2">
+                                <span className="text-emerald-400 mt-0.5">&#10003;</span>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
+                          <h4 className="text-red-400 font-bold text-sm mb-3 flex items-center gap-2">
+                            <XCircle className="w-4 h-4" /> Don&apos;ts
+                          </h4>
+                          <ul className="space-y-2">
+                            {dailyInsights.donts.map((item, idx) => (
+                              <li key={idx} className="text-white/70 text-sm flex items-start gap-2">
+                                <span className="text-red-400 mt-0.5">&#10007;</span>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      <button onClick={() => setExpandedCard(null)} className="w-full mt-5 py-3 bg-white/10 rounded-xl text-white/60 text-sm hover:bg-white/20 transition-colors">Close</button>
+                    </div>
+                  )}
+
+                  {expandedCard === "tip" && (
+                    <div className="bg-gradient-to-br from-[#1A1F2E] to-[#252D3F] p-6 border border-purple-500/20">
+                      <div className="flex items-center gap-3 mb-5">
+                        <span className="text-4xl">💡</span>
+                        <h3 className="text-white text-xl font-bold">Daily Tip</h3>
+                      </div>
+                      <div className="bg-purple-500/10 rounded-xl p-5 border border-purple-500/20">
+                        <p className="text-white/80 leading-relaxed">
+                          {dailyInsights.daily_tip}
+                        </p>
+                      </div>
+                      <p className="text-white/30 text-xs mt-3 text-center">
+                        Personalized based on your birth chart
+                      </p>
+                      <button onClick={() => setExpandedCard(null)} className="w-full mt-5 py-3 bg-white/10 rounded-xl text-white/60 text-sm hover:bg-white/20 transition-colors">Close</button>
+                    </div>
+                  )}
+                </motion.div>
+              </div>
+            )}
+
+            {/* Daily Horoscope Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="relative rounded-2xl overflow-hidden cursor-pointer group border border-white/10"
               onClick={() => router.push("/horoscope")}
             >
-              <div className="p-4 border-b border-white/10">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sun className="w-5 h-5 text-yellow-400" />
-                    <h2 className="text-white font-semibold text-lg">Daily Horoscope</h2>
-                  </div>
-                  <span className="text-white/40 text-xs">{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
-                </div>
-              </div>
+              {/* Gradient background */}
+              <div className="absolute inset-0 bg-[#1A1F2E]" />
+              <div className={`absolute inset-0 bg-gradient-to-br ${userZodiac.color} opacity-50 group-hover:opacity-60 transition-opacity`} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
               
-              <div className="p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${userZodiac.color} flex items-center justify-center`}>
-                    <span className="text-white text-lg">{userZodiac.symbol}</span>
+              {/* Decorative stars */}
+              <div className="absolute top-3 right-4 opacity-20">
+                <Star className="w-16 h-16 text-white" />
+              </div>
+              <div className="absolute top-6 right-16 opacity-10">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+
+              <div className="relative p-5">
+                <div className="flex items-start gap-4">
+                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${userZodiac.color} flex items-center justify-center shadow-lg flex-shrink-0`}>
+                    <span className="text-white text-2xl">{userZodiac.symbol}</span>
                   </div>
-                  <div>
-                    <h3 className="text-white font-medium">{userZodiac.sign}</h3>
-                    <p className="text-white/40 text-xs">Your daily reading</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white/50 text-xs font-medium uppercase tracking-wider mb-0.5">Your Horoscope</p>
+                    <h3 className="text-white font-bold text-lg">{userZodiac.sign}</h3>
+                    <p className="text-white/50 text-xs mt-1">
+                      {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                    </p>
                   </div>
-                  {loading && <Loader2 className="w-4 h-4 text-white/40 animate-spin ml-auto" />}
+                  <div className="flex items-center gap-1 bg-white/10 rounded-full px-3 py-1.5 backdrop-blur-sm">
+                    <span className="text-white/70 text-xs font-medium">Read</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-white/50" />
+                  </div>
                 </div>
                 
-                <p className="text-white/70 text-sm mb-4">
-                  Today brings exciting opportunities for personal growth. The stars align in your favor for creative endeavors and meaningful connections.
-                </p>
-
-                {/* Auspicious Times from API */}
-                {dailyData && (
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    {dailyData.sunRiseSet && (
-                      <>
-                        <div className="bg-white/5 rounded-lg p-2 flex items-center gap-2">
-                          <Sun className="w-4 h-4 text-yellow-400" />
-                          <div>
-                            <p className="text-white/40 text-[10px]">Sunrise</p>
-                            <p className="text-white text-xs">{dailyData.sunRiseSet.sunrise}</p>
-                          </div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-2 flex items-center gap-2">
-                          <Moon className="w-4 h-4 text-orange-400" />
-                          <div>
-                            <p className="text-white/40 text-[10px]">Sunset</p>
-                            <p className="text-white text-xs">{dailyData.sunRiseSet.sunset}</p>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {dailyData.abhijitMuhurat && (
-                      <div className="bg-rose-500/10 rounded-lg p-2 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-rose-400" />
-                        <div>
-                          <p className="text-rose-400/60 text-[10px]">Lucky Time</p>
-                          <p className="text-rose-400 text-xs">{dailyData.abhijitMuhurat.start} - {dailyData.abhijitMuhurat.end}</p>
-                        </div>
-                      </div>
-                    )}
-                    {dailyData.rahuKalam && (
-                      <div className="bg-red-500/10 rounded-lg p-2 flex items-center gap-2">
-                        <Star className="w-4 h-4 text-red-400" />
-                        <div>
-                          <p className="text-red-400/60 text-[10px]">Avoid</p>
-                          <p className="text-red-400 text-xs">{dailyData.rahuKalam.start} - {dailyData.rahuKalam.end}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-white/5 rounded-xl p-3 text-center">
-                    <div className="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center mx-auto mb-2">
-                      <Sparkles className="w-4 h-4 text-pink-400" />
-                    </div>
-                    <p className="text-white/40 text-xs">Love</p>
-                    <p className="text-white text-xs mt-1 line-clamp-2">Romance is in the air</p>
-                  </div>
-                  <div className="bg-white/5 rounded-xl p-3 text-center">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-2">
-                      <Star className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <p className="text-white/40 text-xs">Career</p>
-                    <p className="text-white text-xs mt-1 line-clamp-2">New opportunities await</p>
-                  </div>
-                  <div className="bg-white/5 rounded-xl p-3 text-center">
-                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-2">
-                      <Moon className="w-4 h-4 text-green-400" />
-                    </div>
-                    <p className="text-white/40 text-xs">Health</p>
-                    <p className="text-white text-xs mt-1 line-clamp-2">Focus on self-care</p>
-                  </div>
+                <div className="flex gap-2 mt-4">
+                  {["Daily", "Weekly", "Monthly"].map((label) => (
+                    <span key={label} className="bg-white/10 backdrop-blur-sm rounded-full px-3 py-1 text-white/60 text-[11px] font-medium">
+                      {label}
+                    </span>
+                  ))}
                 </div>
               </div>
             </motion.div>
