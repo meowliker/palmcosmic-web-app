@@ -266,11 +266,35 @@ export async function POST(request: NextRequest) {
               // Create subscription with trial period
               const trialEnd = Math.floor(Date.now() / 1000) + (parseInt(trialDays || "7", 10) * 24 * 60 * 60);
               
+              // Retrieve the payment method from the trial payment so Stripe can charge it when trial ends
+              let defaultPaymentMethod: string | undefined;
+              const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : null;
+              if (paymentIntentId) {
+                try {
+                  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+                  if (typeof paymentIntent.payment_method === "string") {
+                    defaultPaymentMethod = paymentIntent.payment_method;
+                    console.log("Retrieved payment method from trial payment:", defaultPaymentMethod);
+                    
+                    // Also set as customer's default payment method for invoices
+                    await stripe.customers.update(customerId!, {
+                      invoice_settings: {
+                        default_payment_method: defaultPaymentMethod,
+                      },
+                    });
+                    console.log("Set default payment method on customer:", customerId);
+                  }
+                } catch (pmErr) {
+                  console.error("Failed to retrieve payment method from PaymentIntent:", pmErr);
+                }
+              }
+              
               // Build subscription params
               const subParams: Stripe.SubscriptionCreateParams = {
                 customer: customerId,
                 items: [{ price: subscriptionPriceId }],
                 trial_end: trialEnd,
+                default_payment_method: defaultPaymentMethod,
                 metadata: {
                   userId: resolvedUserId || "",
                   plan: plan || "",
