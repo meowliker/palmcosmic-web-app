@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");
     
-    if (!token || token !== process.env.ADMIN_SESSION_SECRET) {
+    if (!token || token !== process.env.ADMIN_SYNC_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
